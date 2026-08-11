@@ -24,7 +24,7 @@ interface SidebarProps {
   onClose?: () => void;
 }
 
-export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
+export default function Sidebar({ collapsed, setCollapsed, onClose }: SidebarProps) {
   const pathname = usePathname();
 
   const menuItems = [
