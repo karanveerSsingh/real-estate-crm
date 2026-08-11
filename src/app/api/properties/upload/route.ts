@@ -63,11 +63,6 @@ export async function POST(request: Request) {
     const files = (await request.formData()).getAll('files').filter((value): value is File => value instanceof File);
     if (!files.length) return NextResponse.json({ error: 'No files provided for upload' }, { status: 400 });
 
-    const hasPersistentStorage = Boolean(process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET);
-    if (process.env.NODE_ENV === 'production' && !hasPersistentStorage) {
-      return NextResponse.json({ error: 'Media storage is not configured. Add CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET to deploy uploads permanently.' }, { status: 503 });
-    }
-
     const uploadedMedia = [];
     for (const file of files) {
       const type = getMediaType(file);
@@ -75,7 +70,19 @@ export async function POST(request: Request) {
       const maxSize = type === 'image' ? 5 * 1024 * 1024 : 50 * 1024 * 1024;
       if (file.size > maxSize) return NextResponse.json({ error: `${type === 'image' ? 'Image' : 'Video'} "${file.name}" exceeds the ${type === 'image' ? '5MB' : '50MB'} size limit.` }, { status: 400 });
 
-      const url = (await uploadToCloudinary(file, type)) || await uploadLocally(file);
+      let url: string | null = null;
+      if (process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET) {
+        try {
+          url = await uploadToCloudinary(file, type);
+        } catch (cloudError) {
+          console.warn('[Property media upload] Cloudinary upload failed, falling back to local storage:', cloudError);
+        }
+      }
+
+      if (!url) {
+        url = await uploadLocally(file);
+      }
+
       uploadedMedia.push({ type, url });
     }
 

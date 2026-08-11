@@ -56,7 +56,9 @@ export default function Header({ sidebarCollapsed, setSidebarOpen, sidebarOpen }
   const [notifications, setNotifications] = useState<any[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [showNotifDropdown, setShowNotifDropdown] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const userMenuRef = useRef<HTMLDivElement>(null);
   const knownNotificationIds = useRef<Set<string> | null>(null);
 
   const fetchNotifications = async () => {
@@ -118,11 +120,14 @@ export default function Header({ sidebarCollapsed, setSidebarOpen, sidebarOpen }
     };
   }, []);
 
-  // Close dropdown on click outside
+  // Close dropdowns on click outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setShowNotifDropdown(false);
+      }
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setShowUserMenu(false);
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
@@ -196,7 +201,7 @@ export default function Header({ sidebarCollapsed, setSidebarOpen, sidebarOpen }
       </div>
 
       {/* Global Search Bar */}
-      <form onSubmit={handleSearchSubmit} className="flex-1 max-w-md mx-4 relative hidden md:block">
+      <form onSubmit={handleSearchSubmit} className="flex-1 max-w-md mx-4 relative ">
         <Search className="absolute left-3 top-2.5 h-4.5 w-4.5 text-[var(--muted)] pointer-events-none" />
         <input
           type="text"
@@ -210,15 +215,6 @@ export default function Header({ sidebarCollapsed, setSidebarOpen, sidebarOpen }
       {/* Right side items */}
       <div className="flex items-center gap-2 sm:gap-3">
         
-        {/* Theme Toggle */}
-        <button
-          onClick={toggleTheme}
-          className="p-2 rounded-lg border border-[var(--border)] bg-[var(--card)] hover:bg-[var(--secondary)] text-[var(--muted)] hover:text-[var(--foreground)] transition-colors cursor-pointer"
-          title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
-        >
-          {theme === 'dark' ? <Sun className="h-4.5 w-4.5" /> : <Moon className="h-4.5 w-4.5" />}
-        </button>
-
         {/* Notifications Bell */}
         <div className="relative" ref={dropdownRef}>
           <button
@@ -320,11 +316,16 @@ export default function Header({ sidebarCollapsed, setSidebarOpen, sidebarOpen }
         </div>
 
         {/* User profile dropdown info */}
-        <div className="flex items-center gap-2 border-l pl-3 border-[var(--border)]">
-          <div className="h-8 w-8 rounded-full bg-blue-500/10 text-blue-500 border border-blue-500/20 flex items-center justify-center shrink-0">
+        <div className="relative flex items-center gap-2 border-l pl-3 border-[var(--border)]" ref={userMenuRef}>
+          <button
+            onClick={() => setShowUserMenu((prev) => !prev)}
+            className="h-8 w-8 rounded-full bg-blue-500/10 text-blue-500 border border-blue-500/20 flex items-center justify-center shrink-0"
+            aria-label="Open user menu"
+          >
             <User className="h-4 w-4" />
-          </div>
-          <div className="text-left hidden lg:block select-none">
+          </button>
+
+          <div className="hidden lg:block text-left select-none">
             <p className="text-xs font-bold leading-3 text-[var(--foreground)] truncate max-w-[100px]">
               {session?.user?.name || 'Admin User'}
             </p>
@@ -332,6 +333,28 @@ export default function Header({ sidebarCollapsed, setSidebarOpen, sidebarOpen }
               System Admin
             </span>
           </div>
+
+          {showUserMenu && (
+            <div className="absolute right-0 top-full mt-2 w-52 rounded-xl border border-[var(--border)] bg-[var(--card)] shadow-lg z-40 overflow-hidden">
+              <div className="px-4 py-3 border-b border-[var(--border)]">
+                <p className="text-sm font-semibold text-[var(--foreground)] truncate">
+                  {session?.user?.name || 'Admin User'}
+                </p>
+                <p className="text-xs text-[var(--muted)]">System Admin</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  toggleTheme();
+                  setShowUserMenu(false);
+                }}
+                className="w-full flex items-center gap-2 px-4 py-3 hover:bg-[var(--secondary)] transition-colors text-sm text-[var(--foreground)]"
+              >
+                {theme === 'dark' ? <Sun className="h-4.5 w-4.5" /> : <Moon className="h-4.5 w-4.5" />}
+                <span>{theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}</span>
+              </button>
+            </div>
+          )}
         </div>
 
       </div>
