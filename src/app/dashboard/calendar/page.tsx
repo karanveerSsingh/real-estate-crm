@@ -1,26 +1,41 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { 
   Calendar as CalendarIcon, 
   ChevronLeft, 
   ChevronRight, 
   Plus, 
-  X, 
   Check, 
-  Phone, 
-  MessageSquare, 
-  Loader2, 
-  Sparkles,
-  Clock,
-  ExternalLink
+  ExternalLink,
+  Cake
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import Link from 'next/link';
 
 export default function CalendarPage() {
-  const [followups, setFollowups] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  type Customer = {
+    _id: string;
+    fullName: string;
+    leadStatus: string;
+    dateOfBirth?: string;
+    mobileNumber?: string;
+    whatsAppNumber?: string;
+  };
+
+  type FollowupEvent = {
+    _id: string;
+    title: string;
+    date: string;
+    time: string;
+    status: string;
+    priority: string;
+    customerName?: string;
+    customerId?: string;
+  };
+
+  const [followups, setFollowups] = useState<FollowupEvent[]>([]);
 
   // Calendar dates state
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -33,53 +48,36 @@ export default function CalendarPage() {
   const [newPriority, setNewPriority] = useState('Medium');
   const [newRemark, setNewRemark] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState('');
-  const [customers, setCustomers] = useState<any[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [allCustomers, setAllCustomers] = useState<Customer[]>([]);
   const [scheduling, setScheduling] = useState(false);
-
-  useEffect(() => {
-    fetchFollowups();
-    fetchCustomers();
-  }, []);
+  const router = useRouter();
 
   const fetchFollowups = async () => {
     try {
-      setLoading(true);
-      // We can fetch all followups
-      const res = await fetch('/api/dashboard'); // dashboard payload has pending followups, but let's query customers to pull all followups.
-      // Wait, let's write a quick client helper. Since we want to display all followups for all customers, we can hit `/api/customers` and then aggregate their followups, or we can fetch a combined list.
-      // Wait! We can hit a specific endpoint or write a quick loop. We know `/api/dashboard` returns widgets.pendingFollowups which contains a list. But for a calendar, we want both completed and pending followups.
-      // Let's check: can we retrieve followups from a combined query?
-      // Let's fetch all customers and pull all followups for each customer, or query `/api/customers` then query followups.
-      // Let's implement an aggregation. Let's fetch all customers. Then, for each customer, fetch their followups.
-      // Actually, let's look at a simpler, more robust way: we can fetch all followups directly by hitting the DB.
-      // Since we don't have a global `/api/followups` endpoint, let's check: can we fetch all customer followups?
-      // Yes! Let's write a simple helper route or just query `/api/customers` and fetch follow-ups in a `Promise.all` loop.
-      // Wait, we can fetch all customers. If we loop and fetch `/api/customers/[id]/followups`, it will fetch all followups. Since there are only a few customers in seed, that is fine.
-      // But wait! Is there a more performant way? Let's check: we can fetch all customers, and since we already have the customer list, let's fetch follow-ups for all of them.
       const resCust = await fetch('/api/customers');
       if (resCust.ok) {
         const custList = await resCust.json();
-        setCustomers(custList);
 
-        // Fetch followups for all customers in parallel
-        const followupsPromises = custList.map(async (c: any) => {
+        const followupsPromises = custList.map(async (c: Customer) => {
           const resF = await fetch(`/api/customers/${c._id}/followups`);
           if (resF.ok) {
-            const dataF = await resF.json();
-            // Attach customer name to each followup
-            return dataF.map((f: any) => ({ ...f, customerName: c.fullName, mobileNumber: c.mobileNumber, whatsAppNumber: c.whatsAppNumber }));
+            const dataF = await resF.json() as FollowupEvent[];
+            return dataF.map((f) => ({
+              ...f,
+              customerName: c.fullName,
+              customerId: c._id,
+            }));
           }
-          return [];
+          return [] as FollowupEvent[];
         });
 
         const nestedFollowups = await Promise.all(followupsPromises);
         const flatFollowups = nestedFollowups.flat();
         setFollowups(flatFollowups);
       }
-    } catch (err) {
+    } catch {
       toast.error('Error fetching calendar schedule');
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -87,14 +85,19 @@ export default function CalendarPage() {
     try {
       const res = await fetch('/api/customers');
       if (res.ok) {
-        const list = await res.json();
-        // Filter out Sold or Lost if we don't want to schedule followups for them, but keep them for selection
-        setCustomers(list.filter((c: any) => c.leadStatus !== 'Sold'));
+        const list = await res.json() as Customer[];
+        setAllCustomers(list);
+        setCustomers(list.filter((c) => c.leadStatus !== 'Sold' && c.leadStatus !== 'Lost'));
       }
     } catch (err) {
       console.error(err);
     }
   };
+
+  useEffect(() => {
+    void fetchFollowups();
+    void fetchCustomers();
+  }, []);
 
   const handleQuickScheduleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -239,6 +242,20 @@ export default function CalendarPage() {
            d1.getDate() === d2.getDate();
   };
 
+  const getBirthdayEventsForDay = (date: Date) => {
+    return allCustomers
+      .filter((customer): customer is Customer & { dateOfBirth: string } => Boolean(customer.dateOfBirth))
+      .map((customer) => {
+        const dob = new Date(customer.dateOfBirth);
+        return {
+          ...customer,
+          birthdayDate: new Date(date.getFullYear(), dob.getMonth(), dob.getDate()),
+          isLeapDay: dob.getMonth() === 1 && dob.getDate() === 29,
+        };
+      })
+      .filter((customer) => isSameDay(customer.birthdayDate, date));
+  };
+
   const getFollowupsForDay = (date: Date) => {
     return followups.filter(f => isSameDay(new Date(f.date), date));
   };
@@ -248,6 +265,7 @@ export default function CalendarPage() {
     'July', 'August', 'September', 'October', 'November', 'December'
   ];
 
+  const selectedDayBirthdays = getBirthdayEventsForDay(selectedDate);
   const selectedDayFollowups = getFollowupsForDay(selectedDate);
 
   return (
@@ -344,6 +362,7 @@ export default function CalendarPage() {
                 const isSelected = isSameDay(date, selectedDate);
                 const isToday = isSameDay(date, new Date());
 
+                const birthdayEvents = getBirthdayEventsForDay(date);
                 return (
                   <div
                     key={index}
@@ -352,11 +371,19 @@ export default function CalendarPage() {
                       isSelected ? 'border-blue-600 bg-blue-600/5' : 'border-[var(--border)] hover:border-blue-500 bg-[var(--card)]'
                     } ${!currentMonth ? 'opacity-40' : ''}`}
                   >
-                    <span className={`text-[10px] font-bold h-5 w-5 rounded-full flex items-center justify-center ${
-                      isToday ? 'bg-blue-600 text-white font-extrabold' : 'text-[var(--foreground)]'
-                    }`}>
-                      {date.getDate()}
-                    </span>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className={`text-[10px] font-bold h-5 w-5 rounded-full flex items-center justify-center ${
+                        isToday ? 'bg-blue-600 text-white font-extrabold' : 'text-[var(--foreground)]'
+                      }`}>
+                        {date.getDate()}
+                      </span>
+                      {birthdayEvents.length > 0 && (
+                        <span className="inline-flex items-center gap-1 text-[9px] font-semibold text-pink-400 bg-pink-500/10 px-1.5 py-0.5 rounded-full">
+                          <Cake className="h-3.5 w-3.5" />
+                          {birthdayEvents.length}
+                        </span>
+                      )}
+                    </div>
                     
                     {/* Event indicators */}
                     <div className="space-y-1">
@@ -449,58 +476,86 @@ export default function CalendarPage() {
             </div>
 
             <div className="flex-1 overflow-y-auto space-y-3 pr-1">
-              {selectedDayFollowups.length === 0 ? (
+              {selectedDayBirthdays.length === 0 && selectedDayFollowups.length === 0 ? (
                 <div className="text-center text-xs text-[var(--muted)] py-16">
                   No tasks or reminders scheduled for this date.
                 </div>
               ) : (
-                selectedDayFollowups.map((task) => (
-                  <div key={task._id} className="p-2.5 bg-[var(--background)] border border-[var(--border)] rounded-lg space-y-2">
-                    <div className="flex justify-between items-start gap-2">
-                      <div>
-                        <h5 className={`text-xs font-bold ${task.status === 'Completed' ? 'line-through text-[var(--muted)]' : ''}`}>
-                          {task.title}
-                        </h5>
-                        <p className="text-[10px] text-[var(--muted)] mt-0.5">
-                          Time: <span className="font-semibold">{task.time}</span> | Priority:{' '}
-                          <span className={`font-semibold ${
-                            task.priority === 'High' ? 'text-red-500 font-bold' :
-                            task.priority === 'Medium' ? 'text-amber-500' :
-                            'text-slate-500'
-                          }`}>
-                            {task.priority}
-                          </span>
-                        </p>
+                <>
+                  {selectedDayBirthdays.map((birthday) => (
+                    <button
+                      key={`birthday-${birthday._id}`}
+                      type="button"
+                      onClick={() => router.push(`/dashboard/leads/${birthday._id}`)}
+                      className="w-full text-left p-3.5 bg-pink-500/5 border border-pink-500/10 rounded-xl space-y-2 hover:bg-pink-500/10 transition-colors"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <div className="flex items-center gap-2 text-[11px] font-bold text-pink-500 uppercase tracking-wider">
+                            <Cake className="h-4 w-4" /> Birthday
+                          </div>
+                          <h5 className="text-sm font-semibold text-[var(--foreground)] truncate">
+                            {birthday.fullName}
+                          </h5>
+                        </div>
+                        <span className="text-[10px] font-semibold text-pink-500">
+                          {birthday.birthdayDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-[var(--muted)]">
+                        Celebrate their special day and open full profile.
+                      </p>
+                    </button>
+                  ))}
+
+                  {selectedDayFollowups.map((task) => (
+                    <div key={task._id} className="p-2.5 bg-[var(--background)] border border-[var(--border)] rounded-lg space-y-2">
+                      <div className="flex justify-between items-start gap-2">
+                        <div>
+                          <h5 className={`text-xs font-bold ${task.status === 'Completed' ? 'line-through text-[var(--muted)]' : ''}`}>
+                            {task.title}
+                          </h5>
+                          <p className="text-[10px] text-[var(--muted)] mt-0.5">
+                            Time: <span className="font-semibold">{task.time}</span> | Priority:{' '}
+                            <span className={`font-semibold ${
+                              task.priority === 'High' ? 'text-red-500 font-bold' :
+                              task.priority === 'Medium' ? 'text-amber-500' :
+                              'text-slate-500'
+                            }`}>
+                              {task.priority}
+                            </span>
+                          </p>
+                        </div>
+
+                        {task.status === 'Pending' && task.customerId ? (
+                          <button
+                            onClick={() => handleCompleteFollowup(task.customerId!, task._id)}
+                            className="p-1 rounded bg-[var(--card)] border border-[var(--border)] text-green-500 hover:bg-green-500/10 cursor-pointer shrink-0"
+                            title="Complete Follow-up"
+                          >
+                            <Check className="h-3 w-3" />
+                          </button>
+                        ) : (
+                          <span className="text-[9px] text-green-500 font-bold uppercase shrink-0">Done</span>
+                        )}
                       </div>
 
-                      {task.status === 'Pending' ? (
-                        <button
-                          onClick={() => handleCompleteFollowup(task.customerId, task._id)}
-                          className="p-1 rounded bg-[var(--card)] border border-[var(--border)] text-green-500 hover:bg-green-500/10 cursor-pointer shrink-0"
-                          title="Complete Follow-up"
-                        >
-                          <Check className="h-3 w-3" />
-                        </button>
-                      ) : (
-                        <span className="text-[9px] text-green-500 font-bold uppercase shrink-0">Done</span>
-                      )}
-                    </div>
-
-                    <div className="pt-1.5 border-t border-[var(--border)] flex justify-between items-center text-[10px]">
-                      <span className="font-semibold">{task.customerName}</span>
-                      
-                      <div className="flex items-center gap-1.5">
-                        <Link 
-                          href={`/dashboard/leads/${task.customerId}`}
-                          className="text-[10px] hover:text-blue-500"
-                          title="Go to customer profile"
-                        >
-                          <ExternalLink className="h-3.5 w-3.5" />
-                        </Link>
+                      <div className="pt-1.5 border-t border-[var(--border)] flex justify-between items-center text-[10px]">
+                        <span className="font-semibold">{task.customerName}</span>
+                        
+                        <div className="flex items-center gap-1.5">
+                          <Link 
+                            href={`/dashboard/leads/${task.customerId}`}
+                            className="text-[10px] hover:text-blue-500"
+                            title="Go to customer profile"
+                          >
+                            <ExternalLink className="h-3.5 w-3.5" />
+                          </Link>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))
+                  ))}
+                </>
               )}
             </div>
           </div>

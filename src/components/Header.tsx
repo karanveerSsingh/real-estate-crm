@@ -1,7 +1,8 @@
 'use client';
+// @refresh reset
 
 import React, { useState, useEffect, useRef } from 'react';
-import { useSession } from 'next-auth/react';
+import { useSession, signOut } from 'next-auth/react';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { 
   Bell, 
@@ -10,7 +11,8 @@ import {
   Moon, 
   User, 
   Menu,
-  Check,
+  LogOut,
+  Cake,
   CalendarDays,
   FileBadge,
   Sparkles
@@ -20,27 +22,41 @@ import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { playNotificationSound, primeNotificationSound } from '@/lib/notificationSound';
 
+type NotificationType = 'FollowUp' | 'Booking' | 'Registry' | 'System' | 'Birthday';
+
+type NotificationItem = {
+  _id: string;
+  title: string;
+  message: string;
+  type: NotificationType;
+  read: boolean;
+  date?: string;
+  createdAt?: string;
+  customerId?: { _id: string } | string;
+};
+
 interface HeaderProps {
   sidebarCollapsed: boolean;
   setSidebarOpen: (open: boolean) => void;
   sidebarOpen: boolean;
 }
 
-export default function Header({ sidebarCollapsed, setSidebarOpen, sidebarOpen }: HeaderProps) {
+export default function Header({ sidebarCollapsed: _sidebarCollapsed, setSidebarOpen, sidebarOpen }: HeaderProps) {
+  void _sidebarCollapsed;
   const { data: session } = useSession();
   const { theme, toggleTheme } = useTheme();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const urlSearchValue = searchParams.get('search') || '';
 
   // Search input state
   const [searchVal, setSearchVal] = useState('');
   
   // Sync searchVal with URL search param
   useEffect(() => {
-    const s = searchParams.get('search') || '';
-    setSearchVal(s);
-  }, [searchParams]);
+    setSearchVal(urlSearchValue);
+  }, [urlSearchValue]);
 
   // Handle Search Submission
   const handleSearchSubmit = (e: React.FormEvent) => {
@@ -53,7 +69,7 @@ export default function Header({ sidebarCollapsed, setSidebarOpen, sidebarOpen }
   };
 
   // Notification state
-  const [notifications, setNotifications] = useState<any[]>([]);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [showNotifDropdown, setShowNotifDropdown] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -71,15 +87,15 @@ export default function Header({ sidebarCollapsed, setSidebarOpen, sidebarOpen }
       }
 
       const data = await res.json();
-      const notificationsList = Array.isArray(data) ? data : [];
-      const notificationIds = notificationsList.map((notification: any) => notification._id).filter(Boolean);
+      const notificationsList = Array.isArray(data) ? data as NotificationItem[] : [];
+      const notificationIds = notificationsList.map((notification) => notification._id).filter(Boolean);
 
       if (knownNotificationIds.current) {
         const newNotifications = notificationsList.filter(
-          (notification: any) => notification._id && !knownNotificationIds.current?.has(notification._id)
+          (notification) => notification._id && !knownNotificationIds.current?.has(notification._id)
         );
 
-        newNotifications.forEach((notification: any) => {
+        newNotifications.forEach((notification) => {
           void playNotificationSound();
           toast(notification.title || 'New notification', {
             icon: '🔔',
@@ -90,7 +106,7 @@ export default function Header({ sidebarCollapsed, setSidebarOpen, sidebarOpen }
 
       knownNotificationIds.current = new Set(notificationIds);
       setNotifications(notificationsList);
-      setUnreadCount(notificationsList.filter((n: any) => !n.read).length);
+      setUnreadCount(notificationsList.filter((n) => !n.read).length);
     } catch (err) {
       setNotifications([]);
       setUnreadCount(0);
@@ -98,6 +114,7 @@ export default function Header({ sidebarCollapsed, setSidebarOpen, sidebarOpen }
     }
   };
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => {
     fetchNotifications();
     // Poll notifications every 45 seconds for real-time reminders
@@ -150,7 +167,7 @@ export default function Header({ sidebarCollapsed, setSidebarOpen, sidebarOpen }
     }
   };
 
-  const handleNotificationClick = async (notif: any) => {
+  const handleNotificationClick = async (notif: NotificationItem) => {
     try {
       if (!notif.read) {
         await fetch('/api/notifications', {
@@ -163,7 +180,8 @@ export default function Header({ sidebarCollapsed, setSidebarOpen, sidebarOpen }
       }
       setShowNotifDropdown(false);
       if (notif.customerId) {
-        router.push(`/dashboard/leads/${notif.customerId._id || notif.customerId}`);
+        const customerId = typeof notif.customerId === 'string' ? notif.customerId : notif.customerId._id;
+        router.push(`/dashboard/leads/${customerId}`);
       }
     } catch (err) {
       console.error(err);
@@ -201,15 +219,22 @@ export default function Header({ sidebarCollapsed, setSidebarOpen, sidebarOpen }
       </div>
 
       {/* Global Search Bar */}
-      <form onSubmit={handleSearchSubmit} className="flex-1 max-w-md mx-4 relative ">
+      <form onSubmit={handleSearchSubmit} className="flex-1 max-w-md mx-4 relative">
         <Search className="absolute left-3 top-2.5 h-4.5 w-4.5 text-[var(--muted)] pointer-events-none" />
         <input
           type="text"
           placeholder="Global Search (Name, Phone, Status, Budget...)"
           value={searchVal}
           onChange={(e) => setSearchVal(e.target.value)}
-          className="w-full pl-10 pr-4 py-2 border rounded-lg text-sm bg-[var(--background)] border-[var(--border)] text-[var(--foreground)] placeholder-[var(--muted)] focus:outline-none focus:ring-1 focus:ring-[var(--ring)] transition-all"
+          className="w-full pl-10 pr-20 py-2 border rounded-lg text-sm bg-[var(--background)] border-[var(--border)] text-[var(--foreground)] placeholder-[var(--muted)] focus:outline-none focus:ring-1 focus:ring-[var(--ring)] transition-all"
         />
+        <button
+          type="submit"
+          aria-label="Search customer leads"
+          className="absolute right-1 top-1 bottom-1 px-2.5 rounded-md bg-blue-600 text-white hover:bg-blue-500 transition-colors cursor-pointer"
+        >
+          <Search className="h-4 w-4" />
+        </button>
       </form>
 
       {/* Right side items */}
@@ -252,7 +277,7 @@ export default function Header({ sidebarCollapsed, setSidebarOpen, sidebarOpen }
                 ) : (
                   notifications.map((notif) => {
                     const isUnread = !notif.read;
-                    const dateFormatted = new Date(notif.date || notif.createdAt).toLocaleDateString(undefined, {
+                    const dateFormatted = new Date(notif.date || notif.createdAt || Date.now()).toLocaleDateString(undefined, {
                       month: 'short',
                       day: 'numeric'
                     });
@@ -272,7 +297,8 @@ export default function Header({ sidebarCollapsed, setSidebarOpen, sidebarOpen }
                           notif.type === 'Registry' ? 'bg-rose-500/10 text-rose-500' :
                           'bg-blue-500/10 text-blue-500'
                         }`}>
-                          {notif.type === 'FollowUp' ? <CalendarDays className="h-4 w-4" /> :
+                          {notif.type === 'Birthday' ? <Cake className="h-4 w-4" /> :
+                           notif.type === 'FollowUp' ? <CalendarDays className="h-4 w-4" /> :
                            notif.type === 'Registry' ? <FileBadge className="h-4 w-4" /> :
                            <Sparkles className="h-4 w-4" />}
                         </div>
@@ -352,6 +378,28 @@ export default function Header({ sidebarCollapsed, setSidebarOpen, sidebarOpen }
               >
                 {theme === 'dark' ? <Sun className="h-4.5 w-4.5" /> : <Moon className="h-4.5 w-4.5" />}
                 <span>{theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowUserMenu(false);
+                  void signOut({ callbackUrl: '/login' });
+                }}
+                className="w-full flex items-center gap-3 px-3 py-2.5  text-sm font-medium text-red-500 hover:bg-red-500/10 transition-all duration-150 cursor-pointer text-left"
+              >
+                <LogOut className="text-red-500  h-4.5 w-4.5" />
+                <span className="text-red-500 ">Logout</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowUserMenu(false);
+                  void signOut({ callbackUrl: '/login' });
+                }}
+                className="w-full lg:hidden flex items-center gap-2 px-4 py-3 hover:bg-[var(--secondary)] transition-colors text-sm text-[var(--foreground)]"
+              >
+                <LogOut className="h-4.5 w-4.5" />
+                <span>Logout</span>
               </button>
             </div>
           )}

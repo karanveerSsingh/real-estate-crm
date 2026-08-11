@@ -91,7 +91,7 @@ export default function Sidebar({ collapsed, setCollapsed, onClose }: SidebarPro
       </nav>
 
       {/* Footer Log Out */}
-      <div className="p-2 border-t border-[var(--sidebar-border)] bg-[var(--sidebar)]">
+      <div className="hidden md:block p-2 border-t border-[var(--sidebar-border)] bg-[var(--sidebar)]">
         <button
           onClick={() => {
             if (onClose) onClose();
