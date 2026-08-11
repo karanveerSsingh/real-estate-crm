@@ -130,7 +130,7 @@ export default function LoginPage() {
             <img
               src="/investWithKaranveer.jpeg"
               alt="Logo"
-              className="h-full w-full object-contain"
+              className="h-full w-full object-contain border "
             />
           </div>
           <h2 className="text-2xl font-bold tracking-tight text-white">
