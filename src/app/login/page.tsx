@@ -19,16 +19,18 @@ const loginSchema = z.object({
 type LoginFormValues = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
-  const { data: session, status } = useSession();
+  const { data: session, status, update } = useSession();
   const router = useRouter();
   const [loading, setLoading] = useState(false);
 
   // Redirect if already authenticated
   useEffect(() => {
+    console.log("[Login] Session status checked:", status, "Session info:", session ? { email: session.user?.email, role: (session.user as any)?.role } : null);
     if (status === "authenticated") {
+      console.log("[Login] Authenticated status confirmed, redirecting to /dashboard");
       router.replace("/dashboard");
     }
-  }, [status, router]);
+  }, [status, router, session]);
 
   const {
     register,
@@ -45,6 +47,7 @@ export default function LoginPage() {
   const onSubmit = async (data: LoginFormValues) => {
     setLoading(true);
     const loadingToast = toast.loading("Authenticating admin...");
+    console.log("[Login] Executing credentials signIn for:", data.email.toLowerCase());
 
     try {
       const result = await signIn("credentials", {
@@ -53,15 +56,28 @@ export default function LoginPage() {
         redirect: false,
       });
 
+      console.log("[Login] signIn callback result:", result ? { ok: result.ok, status: result.status, error: result.error } : null);
+
       toast.dismiss(loadingToast);
 
       if (result?.error) {
         toast.error(result.error || "Invalid credentials");
-      } else {
+      } else if (result?.ok) {
         toast.success("Successfully logged in! Welcome back.");
+        
+        if (typeof update === "function") {
+          console.log("[Login] Forcing useSession update...");
+          const updatedSession = await update();
+          console.log("[Login] Session update completed:", updatedSession);
+        } else {
+          console.warn("[Login] useSession update function is unavailable");
+        }
+
+        console.log("[Login] Replacing route to /dashboard");
         router.replace("/dashboard");
       }
     } catch (err) {
+      console.error("[Login] Unexpected sign-in error:", err);
       toast.dismiss(loadingToast);
       toast.error("An unexpected error occurred. Please try again.");
     } finally {
@@ -69,13 +85,26 @@ export default function LoginPage() {
     }
   };
 
-  if (status === "loading" || status === "authenticated") {
+  if (status === "loading") {
     return (
       <div className="min-h-screen bg-[#060814] flex items-center justify-center">
         <div className="text-center space-y-4">
           <Loader2 className="h-10 w-10 animate-spin text-blue-500 mx-auto" />
           <p className="text-gray-400 text-sm font-medium">
-            Restoring admin session...
+            Loading session...
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (status === "authenticated") {
+    return (
+      <div className="min-h-screen bg-[#060814] flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <Loader2 className="h-10 w-10 animate-spin text-blue-500 mx-auto" />
+          <p className="text-gray-400 text-sm font-medium">
+            Redirecting to dashboard...
           </p>
         </div>
       </div>

@@ -65,6 +65,11 @@ export const authOptions: AuthOptions = {
           throw new Error('Invalid email or password');
         }
 
+        // Verify the user role is admin
+        if (user.role !== 'admin') {
+          throw new Error('Access denied. Admin role required.');
+        }
+
         return {
           id: user._id.toString(),
           email: user.email,
