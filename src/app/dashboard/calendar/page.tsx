@@ -371,7 +371,7 @@ export default function CalendarPage() {
                       isSelected ? 'border-blue-600 bg-blue-600/5' : 'border-[var(--border)] hover:border-blue-500 bg-[var(--card)]'
                     } ${!currentMonth ? 'opacity-40' : ''}`}
                   >
-                    <div className="flex items-center justify-between gap-2">
+                    <div className="flex flex-col items-center justify-between gap-2">
                       <span className={`text-[10px] font-bold h-5 w-5 rounded-full flex items-center justify-center ${
                         isToday ? 'bg-blue-600 text-white font-extrabold' : 'text-[var(--foreground)]'
                       }`}>
