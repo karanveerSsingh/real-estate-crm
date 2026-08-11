@@ -39,7 +39,7 @@ export default function LoginPage() {
   } = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
-      email: "admin@crm.com",
+      email: "admin123@gmail.com",
       password: "",
     },
   });
@@ -153,7 +153,7 @@ export default function LoginPage() {
               <input
                 {...register("email")}
                 type="email"
-                placeholder="admin@crm.com"
+                placeholder="admin123@gmai.com"
                 disabled={loading}
                 className="w-full pl-10 pr-4 py-2.5 bg-[#080a14] border border-gray-800 rounded-xl text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-all disabled:opacity-50"
               />
@@ -210,9 +210,15 @@ export default function LoginPage() {
         </form>
 
         <div className="mt-4 text-center text-sm text-gray-400">
-          Don&apos;t have an account?{" "}
-          <Link
+          Don't have an account?{" "}
+          {/* <Link
             href="/signup"
+            className="text-blue-400 hover:text-blue-300 font-semibold"
+          >
+            Sign Up
+          </Link> */}
+          <Link
+            href=""
             className="text-blue-400 hover:text-blue-300 font-semibold"
           >
             Sign Up
@@ -229,9 +235,9 @@ export default function LoginPage() {
               Demo System Info
             </span>
             Seeded Admin:{" "}
-            <span className="font-mono text-blue-400">admin@crm.com</span>
+            <span className="font-mono text-blue-400">admin123@gmail.com</span>
             <br />
-            Password: <span className="font-mono text-blue-400">admin123</span>
+            Password: <span className="font-mono text-blue-400">123456789</span>
           </div>
         </div>
       </motion.div>

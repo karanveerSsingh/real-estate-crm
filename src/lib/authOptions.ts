@@ -6,7 +6,7 @@ import User from '../models/User';
 
 const DEMO_ADMIN = {
   id: 'demo-admin',
-  email: 'admin@crm.com',
+  email: 'admin123@gmail.com',
   name: 'Admin CRM',
   role: 'admin'
 };
@@ -24,7 +24,7 @@ export const authOptions: AuthOptions = {
     CredentialsProvider({
       name: 'Credentials',
       credentials: {
-        email: { label: 'Email', type: 'email', placeholder: 'admin@crm.com' },
+        email: { label: 'Email', type: 'email', placeholder: 'admin123@gmail.com' },
         password: { label: 'Password', type: 'password' }
       },
       async authorize(credentials) {
