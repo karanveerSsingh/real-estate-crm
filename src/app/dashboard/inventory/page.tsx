@@ -68,9 +68,21 @@ type GalleryMedia = {
   thumbnail?: string;
 };
 
+const normalizeMediaUrl = (url: string) => {
+  if (!url) return url;
+  if (url.startsWith('http://') || url.startsWith('https://')) return url;
+  return url.startsWith('/') ? url : `/${url}`;
+};
+
 const getPropertyMedia = (property: { gallery?: GalleryMedia[]; galleryImages?: string[] }): GalleryMedia[] => {
-  if (property.gallery?.length) return property.gallery;
-  return (property.galleryImages || []).map((url) => ({ type: 'image', url }));
+  if (property.gallery?.length) {
+    return property.gallery.map((item) => ({
+      ...item,
+      url: normalizeMediaUrl(item.url),
+    }));
+  }
+
+  return (property.galleryImages || []).map((url) => ({ type: 'image', url: normalizeMediaUrl(url) }));
 };
 
 export default function InventoryPage() {
