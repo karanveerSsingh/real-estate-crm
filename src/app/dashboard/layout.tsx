@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { Suspense, useState } from 'react';
 import Sidebar from '@/components/Sidebar';
 import Header from '@/components/Header';
 
@@ -36,11 +36,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           collapsed ? 'md:ml-16' : 'md:ml-64'
         }`}
       >
-        <Header 
-          sidebarCollapsed={collapsed} 
-          setSidebarOpen={setMobileOpen} 
-          sidebarOpen={mobileOpen} 
-        />
+        <Suspense fallback={<div className="h-16 border-b border-[var(--border)] bg-[var(--card)]" />}>
+          <Header 
+            sidebarCollapsed={collapsed} 
+            setSidebarOpen={setMobileOpen} 
+            sidebarOpen={mobileOpen} 
+          />
+        </Suspense>
         
         <main className="flex-1 p-4 md:p-6 lg:p-8 overflow-y-auto max-w-[1600px] w-full mx-auto">
           {children}
