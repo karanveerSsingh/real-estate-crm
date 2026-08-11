@@ -1,26 +1,42 @@
 {
-  "name": "crm-temp",
+  "name": "real-estate-crm",
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "node scripts/dev-with-mongo.cjs",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "seed": "tsx --env-file=.env.local src/scripts/seed.ts"
   },
   "dependencies": {
+    "@hookform/resolvers": "^5.4.0",
+    "bcryptjs": "^3.0.3",
+    "framer-motion": "^12.42.2",
+    "lucide-react": "^1.23.0",
+    "mongoose": "^9.7.4",
     "next": "16.2.10",
+    "next-auth": "^4.24.14",
+    "papaparse": "^5.5.4",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "react-hook-form": "^7.81.0",
+    "react-hot-toast": "^2.6.0",
+    "recharts": "^3.9.2",
+    "xlsx": "^0.18.5",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20",
+    "@types/papaparse": "^5.5.2",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.10",
     "tailwindcss": "^4",
+    "tsx": "^4.23.0",
     "typescript": "^5"
   }
 }
