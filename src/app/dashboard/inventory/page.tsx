@@ -23,7 +23,8 @@ import {
   Play,
   Upload,
   Download,
-  Maximize2
+  Maximize2,
+  LandPlot
 } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -554,6 +555,10 @@ export default function InventoryPage() {
                   <div className="flex items-center gap-1">
                     <Compass className="h-3.5 w-3.5 text-amber-500" /> {prop.facing} Facing | {prop.squareYard} Sq Yards
                   </div>
+                </div>
+
+                <div className="flex items-center gap-1 text-[10px] text-[var(--muted)] mt-1.5">
+                  <LandPlot className="h-3.5 w-3.5 text-green-500" /> {prop.propertyCategory || 'Plot'} | {prop.dimensions || 'Dimensions pending'} | {formatINR(prop.pricePerSquareYard || 0)} / sq.yd
                 </div>
 
                 {/* Approvals */}
