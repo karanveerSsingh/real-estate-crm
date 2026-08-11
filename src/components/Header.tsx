@@ -398,8 +398,8 @@ export default function Header({ sidebarCollapsed: _sidebarCollapsed, setSidebar
                 }}
                 className="w-full lg:hidden flex items-center gap-2 px-4 py-3 hover:bg-[var(--secondary)] transition-colors text-sm text-[var(--foreground)]"
               >
-                <LogOut className="h-4.5 w-4.5" />
-                <span>Logout</span>
+                {/* <LogOut className="h-4.5 w-4.5" />
+                <span>Logout</span> */}
               </button>
             </div>
           )}
