@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { signIn, useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
@@ -166,6 +167,13 @@ export default function LoginPage() {
             )}
           </button>
         </form>
+
+        <div className="mt-4 text-center text-sm text-gray-400">
+          Don&apos;t have an account?{' '}
+          <Link href="/signup" className="text-blue-400 hover:text-blue-300 font-semibold">
+            Sign Up
+          </Link>
+        </div>
 
         {/* Demo Credentials Alert Helper */}
         <div className="mt-6 p-3 bg-blue-500/5 border border-blue-500/10 rounded-xl flex gap-3 text-[11px] text-gray-400">
