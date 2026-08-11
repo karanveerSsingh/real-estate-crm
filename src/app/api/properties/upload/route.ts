@@ -1,6 +1,4 @@
-import { createHash, randomUUID } from 'crypto';
-import { promises as fs } from 'fs';
-import path from 'path';
+import { createHash } from 'crypto';
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/authOptions';
@@ -23,7 +21,9 @@ async function uploadToCloudinary(file: File, type: MediaType) {
   const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
   const apiKey = process.env.CLOUDINARY_API_KEY;
   const apiSecret = process.env.CLOUDINARY_API_SECRET;
-  if (!cloudName || !apiKey || !apiSecret) return null;
+  if (!cloudName || !apiKey || !apiSecret) {
+    throw new Error('Persistent media storage is not configured');
+  }
 
   const timestamp = Math.floor(Date.now() / 1000);
   const folder = 'real-estate-crm/properties';
@@ -46,15 +46,6 @@ async function uploadToCloudinary(file: File, type: MediaType) {
   return result.secure_url;
 }
 
-async function uploadLocally(file: File) {
-  const uploadsDir = path.join(process.cwd(), 'public', 'uploads');
-  await fs.mkdir(uploadsDir, { recursive: true });
-  const extension = file.name.split('.').pop()?.toLowerCase() || 'bin';
-  const filename = `${randomUUID()}.${extension}`;
-  await fs.writeFile(path.join(uploadsDir, filename), Buffer.from(await file.arrayBuffer()));
-  return `/uploads/${filename}`;
-}
-
 export async function POST(request: Request) {
   try {
     const session = await getServerSession(authOptions);
@@ -63,6 +54,13 @@ export async function POST(request: Request) {
     const files = (await request.formData()).getAll('files').filter((value): value is File => value instanceof File);
     if (!files.length) return NextResponse.json({ error: 'No files provided for upload' }, { status: 400 });
 
+    if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
+      return NextResponse.json(
+        { error: 'Persistent media storage is not configured. Add the Cloudinary environment variables before uploading property media.' },
+        { status: 503 }
+      );
+    }
+
     const uploadedMedia = [];
     for (const file of files) {
       const type = getMediaType(file);
@@ -70,19 +68,7 @@ export async function POST(request: Request) {
       const maxSize = type === 'image' ? 5 * 1024 * 1024 : 50 * 1024 * 1024;
       if (file.size > maxSize) return NextResponse.json({ error: `${type === 'image' ? 'Image' : 'Video'} "${file.name}" exceeds the ${type === 'image' ? '5MB' : '50MB'} size limit.` }, { status: 400 });
 
-      let url: string | null = null;
-      if (process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET) {
-        try {
-          url = await uploadToCloudinary(file, type);
-        } catch (cloudError) {
-          console.warn('[Property media upload] Cloudinary upload failed, falling back to local storage:', cloudError);
-        }
-      }
-
-      if (!url) {
-        url = await uploadLocally(file);
-      }
-
+      const url = await uploadToCloudinary(file, type);
       uploadedMedia.push({ type, url });
     }
 

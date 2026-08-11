@@ -101,6 +101,7 @@ export default function InventoryPage() {
   const [selectedProperty, setSelectedProperty] = useState<any | null>(null);
   const [carouselIndex, setCarouselIndex] = useState(0);
   const [uploadingMedia, setUploadingMedia] = useState(false);
+  const [unavailableMedia, setUnavailableMedia] = useState<string[]>([]);
 
   // Modal / Form state
   const [modalOpen, setModalOpen] = useState(false);
@@ -115,6 +116,7 @@ export default function InventoryPage() {
 
   useEffect(() => {
     setCarouselIndex(0);
+    setUnavailableMedia([]);
   }, [selectedProperty]);
 
   useEffect(() => {
@@ -392,6 +394,10 @@ export default function InventoryPage() {
     }
   };
 
+  const markMediaUnavailable = (url: string) => {
+    setUnavailableMedia((current) => current.includes(url) ? current : [...current, url]);
+  };
+
   // Reverse Matching Engine: Find Leads matching selected property
   const getMatchingLeads = (property: any) => {
     if (!property || leads.length === 0) return [];
@@ -620,6 +626,7 @@ export default function InventoryPage() {
               {getPropertyMedia(selectedProperty).length > 0 && (() => {
                 const media = getPropertyMedia(selectedProperty);
                 const currentMedia = media[carouselIndex] || media[0];
+                const isUnavailable = unavailableMedia.includes(currentMedia.url);
                 const moveCarousel = (direction: number) => {
                   setCarouselIndex((current) => (current + direction + media.length) % media.length);
                 };
@@ -631,10 +638,16 @@ export default function InventoryPage() {
                       <span className="text-[10px] text-[var(--muted)]">{carouselIndex + 1} / {media.length}</span>
                     </div>
                     <div ref={mediaPreviewRef} className="relative aspect-[16/10] overflow-hidden rounded-xl border border-[var(--border)] bg-black">
-                      {currentMedia.type === 'video' ? (
-                        <video key={currentMedia.url} src={currentMedia.url} controls preload="metadata" className="h-full w-full object-contain" />
+                      {isUnavailable ? (
+                        <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-[var(--background)] px-4 text-center text-[var(--muted)]">
+                          <AlertCircle className="h-6 w-6 text-amber-500" />
+                          <span className="text-xs font-semibold">Media unavailable</span>
+                          <span className="text-[10px]">This file is no longer accessible. Upload it again to restore it.</span>
+                        </div>
+                      ) : currentMedia.type === 'video' ? (
+                        <video key={currentMedia.url} src={currentMedia.url} controls playsInline preload="metadata" onError={() => markMediaUnavailable(currentMedia.url)} className="h-full w-full object-contain" />
                       ) : (
-                        <img src={currentMedia.url} alt={`${selectedProperty.propertyName} media ${carouselIndex + 1}`} className="h-full w-full object-contain" />
+                        <img src={currentMedia.url} alt={`${selectedProperty.propertyName} media ${carouselIndex + 1}`} onError={() => markMediaUnavailable(currentMedia.url)} className="h-full w-full object-contain" />
                       )}
                       {currentMedia.type === 'video' && (
                         <div className="pointer-events-none absolute left-2 top-2 rounded-md bg-black/60 px-1.5 py-1 text-white">
