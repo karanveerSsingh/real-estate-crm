@@ -16,7 +16,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Pink City Plot Hub | Real Estate CRM & Inventory Management",
+  title: "Invest with Karanveer | Real Estate CRM & Inventory Management",
   description: "A premium, unified customer relationships dashboard and property catalog for managing real estate leads, timelines, and transactions.",
 };
 

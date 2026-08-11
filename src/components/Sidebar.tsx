@@ -46,7 +46,7 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
         {!collapsed ? (
           <div className="flex items-center gap-2 font-bold text-lg bg-gradient-to-r from-blue-500 to-indigo-500 bg-clip-text text-transparent">
             <Sparkles className="h-5 w-5 text-blue-500" />
-            <span>Pink City Plot Hub</span>
+            <span>Invest with Karanveer</span>
           </div>
         ) : (
           <div className="mx-auto text-blue-500">

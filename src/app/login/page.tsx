@@ -97,7 +97,7 @@ export default function LoginPage() {
           <div className="inline-flex items-center justify-center h-12 w-12 rounded-xl bg-blue-500/10 border border-blue-500/25 text-blue-400 mb-2">
             <Sparkles className="h-6 w-6" />
           </div>
-          <h2 className="text-2xl font-bold tracking-tight text-white">Apex Real Estate</h2>
+          <h2 className="text-2xl font-bold tracking-tight text-white">Invest with Karanveer</h2>
           <p className="text-gray-400 text-xs sm:text-sm">
             Enter admin credentials to access your CRM catalog.
           </p>

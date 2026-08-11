@@ -46,11 +46,11 @@ export default function SettingsPage() {
   } = useForm<SettingsFormValues>({
     resolver: zodResolver(settingsSchema) as any,
     defaultValues: {
-      companyName: 'Apex Real Estate Solutions',
+      companyName: 'Invest with Karanveer Solutions',
       officeAddress: '123 Business Park, Tonk Road, Jaipur',
       phone: '+919876543210',
       whatsApp: '+919876543210',
-      email: 'contact@apexrealestate.com',
+      email: 'contact@InvestwithKaranveer.com',
       theme: 'dark'
     }
   });

@@ -48,12 +48,12 @@ async function seed() {
     // 2. Create Settings
     console.log('Seeding Settings...');
     const setting = await Setting.create({
-      companyName: 'Apex Real Estate Solutions',
+      companyName: 'Invest with Karanveer',
       logoUrl: '',
       officeAddress: 'Apex Tower, Tonk Road, Jaipur, Rajasthan - 302018',
       phone: '+919876543210',
       whatsApp: '+919876543210',
-      email: 'contact@apexrealestate.com',
+      email: 'contact@InvestwithKaranveer.com',
       theme: 'dark'
     });
     console.log('Settings seeded!');
