@@ -21,6 +21,7 @@ import { useTheme } from './ThemeProvider';
 interface SidebarProps {
   collapsed: boolean;
   setCollapsed: (collapsed: boolean) => void;
+  onClose?: () => void;
 }
 
 export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
@@ -45,14 +46,16 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
       <div className="h-16 flex items-center justify-between px-4 border-b border-[var(--sidebar-border)]">
         {!collapsed ? (
           <div className="flex items-center gap-2 font-bold text-lg bg-gradient-to-r from-blue-500 to-indigo-500 bg-clip-text text-transparent">
-            <Sparkles className="h-5 w-5 text-blue-500" />
+            {/* <Sparkles className="h-5 w-5 text-blue-500" /> */}
             <span>Invest with Karanveer</span>
           </div>
-        ) : (
+        ) 
+        : (
           <div className="mx-auto text-blue-500">
-            <Sparkles className="h-6 w-6" />
+            {/* <Sparkles className="h-6 w-6" /> */}
           </div>
-        )}
+        )
+        }
         
         {/* Collapse Button */}
         <button 
@@ -78,6 +81,7 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
                   ? 'bg-blue-600/10 text-blue-500 border-l-4 border-blue-600 pl-2' 
                   : 'text-[var(--muted)] hover:bg-[var(--secondary)] hover:text-[var(--foreground)]'
               }`}
+              onClick={() => onClose && onClose()}
             >
               <Icon className={`h-5 w-5 shrink-0 ${isActive ? 'text-blue-500' : ''}`} />
               {!collapsed && <span className="truncate">{item.name}</span>}
@@ -89,7 +93,10 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
       {/* Footer Log Out */}
       <div className="p-2 border-t border-[var(--sidebar-border)] bg-[var(--sidebar)]">
         <button
-          onClick={() => signOut({ callbackUrl: '/login' })}
+          onClick={() => {
+            if (onClose) onClose();
+            signOut({ callbackUrl: '/login' });
+          }}
           className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-red-500 hover:bg-red-500/10 transition-all duration-150 cursor-pointer text-left"
         >
           <LogOut className="h-5 w-5 shrink-0" />

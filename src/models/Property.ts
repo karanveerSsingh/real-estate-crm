@@ -21,6 +21,23 @@ const PropertySchema = new mongoose.Schema(
     status: { type: String, enum: ['Available', 'Booked', 'Sold'], default: 'Available' },
     description: { type: String, default: '' },
     galleryImages: { type: [String], default: [] },
+    gallery: {
+      type: [{
+        type: {
+          type: String,
+          enum: ['image', 'video'],
+          required: true
+        },
+        url: {
+          type: String,
+          required: true
+        },
+        thumbnail: {
+          type: String
+        }
+      }],
+      default: []
+    },
     googleMapLink: { type: String, default: '' },
     amenities: { type: [String], default: [] },
     nearbyLandmarks: { type: [String], default: [] }

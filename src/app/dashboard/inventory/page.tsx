@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
   Building2, 
@@ -18,7 +18,12 @@ import {
   Users,
   Eye,
   AlertCircle,
-  ChevronRight
+  ChevronRight,
+  ChevronLeft,
+  Play,
+  Upload,
+  Download,
+  Maximize2
 } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -48,9 +53,25 @@ const propertySchema = z.object({
   amenities: z.array(z.string()).default([]),
   nearbyLandmarks: z.array(z.string()).default([]),
   galleryImages: z.array(z.string()).default([]),
+  gallery: z.array(z.object({
+    type: z.enum(['image', 'video']),
+    url: z.string(),
+    thumbnail: z.string().optional()
+  })).default([]),
 });
 
 type PropertyFormValues = z.infer<typeof propertySchema>;
+
+type GalleryMedia = {
+  type: 'image' | 'video';
+  url: string;
+  thumbnail?: string;
+};
+
+const getPropertyMedia = (property: { gallery?: GalleryMedia[]; galleryImages?: string[] }): GalleryMedia[] => {
+  if (property.gallery?.length) return property.gallery;
+  return (property.galleryImages || []).map((url) => ({ type: 'image', url }));
+};
 
 export default function InventoryPage() {
   const router = useRouter();
@@ -66,6 +87,8 @@ export default function InventoryPage() {
 
   // Selected Property for side drawer detail
   const [selectedProperty, setSelectedProperty] = useState<any | null>(null);
+  const [carouselIndex, setCarouselIndex] = useState(0);
+  const [uploadingMedia, setUploadingMedia] = useState(false);
 
   // Modal / Form state
   const [modalOpen, setModalOpen] = useState(false);
@@ -75,6 +98,12 @@ export default function InventoryPage() {
   const [amenityInput, setAmenityInput] = useState('');
   const [landmarkInput, setLandmarkInput] = useState('');
   const [galleryInput, setGalleryInput] = useState('');
+  const mediaInputRef = useRef<HTMLInputElement>(null);
+  const mediaPreviewRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setCarouselIndex(0);
+  }, [selectedProperty]);
 
   useEffect(() => {
     fetchProperties();
@@ -147,12 +176,14 @@ export default function InventoryPage() {
       amenities: [],
       nearbyLandmarks: [],
       galleryImages: [],
+      gallery: [],
     }
   });
 
   const formAmenities = watch('amenities') || [];
   const formLandmarks = watch('nearbyLandmarks') || [];
   const formGalleryImages = watch('galleryImages') || [];
+  const formGallery = watch('gallery') || [];
   const formSquareYard = watch('squareYard') || 0;
   const formRate = watch('pricePerSquareYard') || 0;
 
@@ -186,6 +217,7 @@ export default function InventoryPage() {
       amenities: [],
       nearbyLandmarks: [],
       galleryImages: [],
+      gallery: [],
     });
     setModalOpen(true);
   };
@@ -214,6 +246,7 @@ export default function InventoryPage() {
       amenities: prop.amenities || [],
       nearbyLandmarks: prop.nearbyLandmarks || [],
       galleryImages: prop.galleryImages || [],
+      gallery: getPropertyMedia(prop),
     });
     setModalOpen(true);
   };
@@ -289,13 +322,62 @@ export default function InventoryPage() {
   const addGalleryImage = () => {
     if (!galleryInput.trim()) return;
     setValue('galleryImages', [...formGalleryImages, galleryInput.trim()]);
+    setValue('gallery', [...formGallery, { type: 'image', url: galleryInput.trim() }]);
     setGalleryInput('');
   };
 
-  const removeGalleryImage = (index: number) => {
-    const current = [...formGalleryImages];
-    current.splice(index, 1);
-    setValue('galleryImages', current);
+  const removeGalleryMedia = (index: number) => {
+    const current = [...formGallery];
+    const [removed] = current.splice(index, 1);
+    setValue('gallery', current, { shouldDirty: true });
+    if (removed?.type === 'image') {
+      setValue('galleryImages', formGalleryImages.filter((url) => url !== removed.url), { shouldDirty: true });
+    }
+  };
+
+  const handleMediaUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || []);
+    event.target.value = '';
+    if (!files.length) return;
+
+    const supported = /\.(jpe?g|png|webp|mp4|webm|mov)$/i;
+    const invalidFile = files.find((file) => !supported.test(file.name));
+    if (invalidFile) {
+      toast.error(`Unsupported file: ${invalidFile.name}. Use JPG, PNG, WEBP, MP4, WEBM, or MOV.`);
+      return;
+    }
+
+    setUploadingMedia(true);
+    try {
+      const uploadData = new FormData();
+      files.forEach((file) => uploadData.append('files', file));
+      const response = await fetch('/api/properties/upload', { method: 'POST', body: uploadData });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Media upload failed');
+
+      const media = result as GalleryMedia[];
+      setValue('gallery', [...formGallery, ...media], { shouldDirty: true });
+      setValue(
+        'galleryImages',
+        [...formGalleryImages, ...media.filter((item) => item.type === 'image').map((item) => item.url)],
+        { shouldDirty: true }
+      );
+      toast.success(`${media.length} media file${media.length === 1 ? '' : 's'} uploaded`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to upload media');
+    } finally {
+      setUploadingMedia(false);
+    }
+  };
+
+  const openMediaFullscreen = async () => {
+    const preview = mediaPreviewRef.current;
+    if (!preview || document.fullscreenElement) return;
+    try {
+      await preview.requestFullscreen();
+    } catch {
+      toast.error('Fullscreen is not available in this browser');
+    }
   };
 
   // Reverse Matching Engine: Find Leads matching selected property
@@ -484,7 +566,8 @@ export default function InventoryPage() {
 
         {/* Selected Property Detail Sidebar Drawer */}
         {selectedProperty && (
-          <div className="lg:col-span-4 p-4 bg-[var(--card)] border border-[var(--border)] rounded-xl space-y-4 animate-in slide-in-from-right-4 duration-200">
+          <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm lg:static lg:col-span-4 lg:block lg:bg-transparent lg:p-0 lg:backdrop-blur-none">
+          <div role="dialog" aria-modal="true" aria-label="Property listing details" className="w-full max-w-md max-h-[90vh] overflow-y-auto p-4 bg-[var(--card)] border border-[var(--border)] rounded-xl space-y-4 shadow-2xl animate-in fade-in zoom-in-95 duration-200 lg:max-w-none lg:shadow-sm lg:slide-in-from-right-4">
             <div className="flex justify-between items-center pb-2 border-b border-[var(--border)]">
               <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--muted)]">Listing Details</h3>
               <button 
@@ -521,6 +604,58 @@ export default function InventoryPage() {
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>
               </div>
+
+              {getPropertyMedia(selectedProperty).length > 0 && (() => {
+                const media = getPropertyMedia(selectedProperty);
+                const currentMedia = media[carouselIndex] || media[0];
+                const moveCarousel = (direction: number) => {
+                  setCarouselIndex((current) => (current + direction + media.length) % media.length);
+                };
+
+                return (
+                  <section className="space-y-2" aria-label="Property media">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--muted)]">Property Media</span>
+                      <span className="text-[10px] text-[var(--muted)]">{carouselIndex + 1} / {media.length}</span>
+                    </div>
+                    <div ref={mediaPreviewRef} className="relative aspect-[16/10] overflow-hidden rounded-xl border border-[var(--border)] bg-black">
+                      {currentMedia.type === 'video' ? (
+                        <video key={currentMedia.url} src={currentMedia.url} controls preload="metadata" className="h-full w-full object-contain" />
+                      ) : (
+                        <img src={currentMedia.url} alt={`${selectedProperty.propertyName} media ${carouselIndex + 1}`} className="h-full w-full object-contain" />
+                      )}
+                      {currentMedia.type === 'video' && (
+                        <div className="pointer-events-none absolute left-2 top-2 rounded-md bg-black/60 px-1.5 py-1 text-white">
+                          <Play className="h-3 w-3 fill-current" />
+                        </div>
+                      )}
+                      {media.length > 1 && <>
+                        <button type="button" aria-label="Previous media" onClick={() => moveCarousel(-1)} className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-black/55 p-1.5 text-white transition-colors hover:bg-black/80 cursor-pointer">
+                          <ChevronLeft className="h-4 w-4" />
+                        </button>
+                        <button type="button" aria-label="Next media" onClick={() => moveCarousel(1)} className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-black/55 p-1.5 text-white transition-colors hover:bg-black/80 cursor-pointer">
+                          <ChevronRight className="h-4 w-4" />
+                        </button>
+                      </>}
+                      <div className="absolute right-2 top-2 flex gap-1.5">
+                        <a href={currentMedia.url} download target="_blank" rel="noopener noreferrer" aria-label="Download media" className="rounded-full bg-black/55 p-1.5 text-white transition-colors hover:bg-black/80 cursor-pointer">
+                          <Download className="h-3.5 w-3.5" />
+                        </a>
+                        <button type="button" aria-label="View media fullscreen" onClick={openMediaFullscreen} className="rounded-full bg-black/55 p-1.5 text-white transition-colors hover:bg-black/80 cursor-pointer">
+                          <Maximize2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                    {media.length > 1 && (
+                      <div className="flex justify-center gap-1.5" aria-label="Media slide navigation">
+                        {media.map((item, index) => (
+                          <button key={`${item.url}-${index}`} type="button" aria-label={`Show media ${index + 1}`} onClick={() => setCarouselIndex(index)} className={`h-1.5 rounded-full transition-all cursor-pointer ${index === carouselIndex ? 'w-4 bg-blue-500' : 'w-1.5 bg-[var(--border)] hover:bg-blue-400'}`} />
+                        ))}
+                      </div>
+                    )}
+                  </section>
+                );
+              })()}
 
               {/* Description */}
               {selectedProperty.description && (
@@ -604,6 +739,7 @@ export default function InventoryPage() {
               </div>
 
             </div>
+          </div>
           </div>
         )}
 
@@ -873,14 +1009,34 @@ export default function InventoryPage() {
                 </div>
               </div>
 
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-[var(--muted)] uppercase block">Gallery Images</label>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-3">
+                  <label className="text-xs font-semibold text-[var(--muted)] uppercase block">Gallery / Property Media</label>
+                  <input ref={mediaInputRef} type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/webm,video/quicktime" multiple className="hidden" onChange={handleMediaUpload} />
+                  <button type="button" onClick={() => mediaInputRef.current?.click()} disabled={uploadingMedia} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-60 text-white rounded-xl text-xs font-semibold cursor-pointer">
+                    {uploadingMedia ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+                    {uploadingMedia ? 'Uploading...' : 'Add Media'}
+                  </button>
+                </div>
+                <p className="text-[10px] text-[var(--muted)]">Images: JPG, PNG, WEBP (max 5MB). Videos: MP4, WEBM, MOV (max 50MB).</p>
+                {formGallery.length > 0 && (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {formGallery.map((media, index) => (
+                      <div key={`${media.url}-${index}`} className="relative aspect-[4/3] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--background)]">
+                        {media.type === 'video' ? <video src={media.url} preload="metadata" className="h-full w-full object-cover" /> : <img src={media.url} alt={`Gallery preview ${index + 1}`} className="h-full w-full object-cover" />}
+                        {media.type === 'video' && <span className="absolute left-2 bottom-2 inline-flex items-center gap-1 rounded bg-black/65 px-1.5 py-0.5 text-[9px] font-semibold text-white"><Play className="h-2.5 w-2.5 fill-current" /> VIDEO</span>}
+                        <button type="button" aria-label={`Remove media ${index + 1}`} onClick={() => removeGalleryMedia(index)} className="absolute right-1.5 top-1.5 rounded-full bg-black/70 p-1 text-white hover:bg-red-500 cursor-pointer"><X className="h-3 w-3" /></button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <label className="text-[10px] font-semibold text-[var(--muted)]">Add image URL (optional)</label>
                 <div className="flex gap-2 mb-2">
                   <input
                     type="text"
                     value={galleryInput}
                     onChange={(e) => setGalleryInput(e.target.value)}
-                    placeholder="Image URL or uploaded path"
+                    placeholder="https://example.com/property.jpg"
                     className="flex-1 p-2 border rounded-xl text-xs bg-[var(--background)] border-[var(--border)] focus:outline-none"
                   />
                   <button
@@ -890,13 +1046,6 @@ export default function InventoryPage() {
                   >
                     Add
                   </button>
-                </div>
-                <div className="flex gap-1 flex-wrap">
-                  {formGalleryImages.map((image, idx) => (
-                    <span key={idx} className="text-[10px] bg-blue-500/10 text-blue-500 px-2 py-0.5 rounded-full flex items-center gap-1 font-semibold border border-blue-500/15">
-                      Image {idx + 1} <X className="h-3 w-3 hover:text-red-500 cursor-pointer" onClick={() => removeGalleryImage(idx)} />
-                    </span>
-                  ))}
                 </div>
               </div>
 

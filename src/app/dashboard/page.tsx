@@ -130,7 +130,8 @@ export default function DashboardHome() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gradient-to-r from-blue-600/10 to-indigo-600/5 p-4 rounded-xl border border-blue-500/10">
         <div>
           <h2 className="text-xl font-bold flex items-center gap-2">
-            Welcome back, Administrator <Sparkles className="h-4.5 w-4.5 text-yellow-500 animate-spin" />
+            Welcome back, Administrator 
+            {/* <Sparkles className="h-4.5 w-4.5 text-yellow-500 animate-spin" /> */}
           </h2>
           <p className="text-xs text-[var(--muted)] mt-1">
             Your real estate sales funnel has generated <span className="font-semibold text-blue-500">{stats.totalSales} deals</span> closed and ₹{(stats.totalRevenue / 10000000).toFixed(2)} Cr in revenue.

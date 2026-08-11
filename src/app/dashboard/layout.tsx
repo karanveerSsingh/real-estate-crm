@@ -25,7 +25,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             className="fixed inset-0 bg-black/60 backdrop-blur-sm"
           />
           <div className="relative w-64 h-full">
-            <Sidebar collapsed={false} setCollapsed={() => {}} />
+            <Sidebar collapsed={false} setCollapsed={() => {}} onClose={() => setMobileOpen(false)} />
           </div>
         </div>
       )}

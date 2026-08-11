@@ -34,8 +34,21 @@ export async function GET() {
     const totalLeads = await Customer.countDocuments();
     const newLeads = await Customer.countDocuments({ leadStatus: 'New' });
     const interestedLeads = await Customer.countDocuments({ leadStatus: 'Interested' });
-    const residentialLeads = await Customer.countDocuments({ purpose: 'Residential' });
-    const investmentLeads = await Customer.countDocuments({ purpose: 'Investment' });
+    // Fetch all leads' purposes to calculate intent dynamically with normalization
+    const allLeadsPurposes = await Customer.find({}, 'purpose');
+    let residentialLeads = 0;
+    let investmentLeads = 0;
+
+    allLeadsPurposes.forEach(lead => {
+      if (lead.purpose) {
+        const p = lead.purpose.toLowerCase().trim();
+        if (p.startsWith('invest') || p === 'commercial' || p === 'shop' || p === 'office') {
+          investmentLeads++;
+        } else {
+          residentialLeads++;
+        }
+      }
+    });
 
     // Follow-ups
     const todayFollowups = await FollowUp.countDocuments({
