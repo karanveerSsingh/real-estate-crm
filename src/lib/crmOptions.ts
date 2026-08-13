@@ -68,9 +68,28 @@ export const PAYMENT_MODE_OPTIONS = [
   'Other',
 ] as const;
 
-export const formatINR = (value: number) =>
-  new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
+/**
+ * Formats a stored rupee amount for UI display without changing the value used
+ * in forms, APIs, or the database. Example: 640000 → "6,40,000 (6.4 Lakh)".
+ */
+export const formatINR = (value: number | null | undefined) => {
+  const amount = Number(value);
+  const safeAmount = Number.isFinite(amount) ? amount : 0;
+  const absoluteAmount = Math.abs(safeAmount);
+  const formattedAmount = new Intl.NumberFormat('en-IN', {
     maximumFractionDigits: 0,
-  }).format(Number.isFinite(value) ? value : 0);
+  }).format(safeAmount);
+
+  const compact = (divisor: number, suffix: string) => {
+    const compactValue = absoluteAmount / divisor;
+    const readable = Number.isInteger(compactValue)
+      ? String(compactValue)
+      : compactValue.toFixed(1).replace(/\.0$/, '');
+    return `${safeAmount < 0 ? '-' : ''}${readable}${suffix === 'K' ? '' : ' '}${suffix}`;
+  };
+
+  if (absoluteAmount >= 10_000_000) return `${formattedAmount} (${compact(10_000_000, 'Crore')})`;
+  if (absoluteAmount >= 100_000) return `${formattedAmount} (${compact(100_000, 'Lakh')})`;
+  if (absoluteAmount >= 1_000) return `${formattedAmount} (${compact(1_000, 'K')})`;
+  return formattedAmount;
+};

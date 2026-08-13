@@ -25,7 +25,7 @@ import {
   X
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { PAYMENT_MODE_OPTIONS, formatINR } from '@/lib/crmOptions';
+import { PAYMENT_MODE_OPTIONS, PROPERTY_CATEGORY_OPTIONS, formatINR } from '@/lib/crmOptions';
 
 export default function LeadDetailPage() {
   const params = useParams();
@@ -35,7 +35,19 @@ export default function LeadDetailPage() {
   const [customer, setCustomer] = useState<any>(null);
   const [timeline, setTimeline] = useState<any[]>([]);
   const [followups, setFollowups] = useState<any[]>([]);
-  const [properties, setProperties] = useState<any[]>([]);
+  const [visits, setVisits] = useState<any[]>([]);
+  const [visitProperties, setVisitProperties] = useState<any[]>([]);
+  const [selectedVisitPropertyId, setSelectedVisitPropertyId] = useState('');
+  const [visitDate, setVisitDate] = useState('');
+  const [visitTime, setVisitTime] = useState('');
+  const [visitNotes, setVisitNotes] = useState('');
+  const [visitSubmitting, setVisitSubmitting] = useState(false);
+  const [matchedProperties, setMatchedProperties] = useState<any[]>([]);
+  const [matchingLoading, setMatchingLoading] = useState(false);
+  const [matchSort, setMatchSort] = useState('match');
+  const [matchLocation, setMatchLocation] = useState('');
+  const [matchTolerance, setMatchTolerance] = useState<'tolerant' | 'strict'>('tolerant');
+  const [matchPropertyType, setMatchPropertyType] = useState('');
   const [soldRecord, setSoldRecord] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
@@ -50,6 +62,8 @@ export default function LeadDetailPage() {
   const [fTime, setFTime] = useState('');
   const [fRemark, setFRemark] = useState('');
   const [fPriority, setFPriority] = useState('Medium');
+  const [fType, setFType] = useState<'Follow-up' | 'Property Visit'>('Follow-up');
+  const [fPropertyId, setFPropertyId] = useState('');
   const [fSubmit, setFSubmit] = useState(false);
 
   // Transition to Sold states
@@ -141,10 +155,13 @@ export default function LeadDetailPage() {
 
   useEffect(() => {
     fetchProfileDetails();
-    fetchInventoryProperties();
   }, [id]);
 
-  const fetchProfileDetails = async () => {
+  useEffect(() => {
+    fetchMatchingProperties();
+  }, [id, matchSort, matchLocation, matchTolerance, matchPropertyType]);
+
+  async function fetchProfileDetails() {
     try {
       setLoading(true);
       // Fetch customer detail
@@ -156,6 +173,7 @@ export default function LeadDetailPage() {
       }
       const dataCust = await resCust.json();
       setCustomer(dataCust);
+      void fetchMatchingProperties();
 
       // Fetch timeline logs
       const resTime = await fetch(`/api/customers/${id}/timeline`);
@@ -164,6 +182,19 @@ export default function LeadDetailPage() {
       // Fetch followups
       const resFollow = await fetch(`/api/customers/${id}/followups`);
       if (resFollow.ok) setFollowups(await resFollow.json());
+
+      const [resVisits, resProperties] = await Promise.all([
+        fetch(`/api/customers/${id}/visits`),
+        fetch(`/api/properties?status=Available&customerId=${id}`)
+      ]);
+      if (resVisits.ok) setVisits(await resVisits.json());
+      if (resProperties.ok) {
+        setVisitProperties(await resProperties.json());
+      } else {
+        // Ranking is an enhancement; keep the visit scheduler usable if it is unavailable.
+        const fallbackProperties = await fetch('/api/properties?status=Available');
+        if (fallbackProperties.ok) setVisitProperties(await fallbackProperties.json());
+      }
 
       // Fetch sold record if customer is sold
       if (dataCust.leadStatus === 'Sold') {
@@ -179,16 +210,25 @@ export default function LeadDetailPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }
 
-  const fetchInventoryProperties = async () => {
+  async function fetchMatchingProperties() {
     try {
-      const resProp = await fetch('/api/properties');
-      if (resProp.ok) setProperties(await resProp.json());
+      setMatchingLoading(true);
+      const query = new URLSearchParams({ sort: matchSort, tolerance: matchTolerance });
+      if (matchLocation) query.set('location', matchLocation);
+      if (matchPropertyType) query.set('propertyType', matchPropertyType);
+      const response = await fetch(`/api/matches/customer/${id}?${query}`);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Unable to match properties');
+      setMatchedProperties(data.matches || []);
     } catch (err) {
-      console.error(err);
+      setMatchedProperties([]);
+      toast.error(err instanceof Error ? err.message : 'Unable to match properties');
+    } finally {
+      setMatchingLoading(false);
     }
-  };
+  }
 
   // Log activity submit
   const handleAddTimelineLog = async (e: React.FormEvent) => {
@@ -222,8 +262,8 @@ export default function LeadDetailPage() {
   // Add followup reminder submit
   const handleAddFollowup = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!fTitle.trim() || !fDate || !fTime) {
-      toast.error('Please input Title, Date and Time');
+    if ((!fTitle.trim() && fType !== 'Property Visit') || !fDate || !fTime || (fType === 'Property Visit' && !fPropertyId)) {
+      toast.error(fType === 'Property Visit' ? 'Please select a property, date and time' : 'Please input Title, Date and Time');
       return;
     }
 
@@ -233,11 +273,17 @@ export default function LeadDetailPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          title: fTitle.trim(),
+          title: fTitle.trim() || 'Property Visit',
           date: fDate,
           time: fTime,
           remark: fRemark.trim(),
-          priority: fPriority
+          priority: fPriority,
+          type: fType,
+          status: fType === 'Property Visit' ? 'Planned' : 'Pending',
+          ...(fType === 'Property Visit' ? (() => {
+            const property = visitProperties.find((item) => item._id === fPropertyId);
+            return property ? { propertyId: property._id, propertyName: property.propertyName, projectName: property.projectName || '', location: property.location || '' } : {};
+          })() : {})
         })
       });
 
@@ -247,6 +293,7 @@ export default function LeadDetailPage() {
         setFDate('');
         setFTime('');
         setFRemark('');
+        setFPropertyId('');
         // Reload follow-ups and timeline
         const resFollow = await fetch(`/api/customers/${id}/followups`);
         if (resFollow.ok) setFollowups(await resFollow.json());
@@ -254,7 +301,8 @@ export default function LeadDetailPage() {
         const resTime = await fetch(`/api/customers/${id}/timeline`);
         if (resTime.ok) setTimeline(await resTime.json());
       } else {
-        toast.error('Failed to create reminder');
+        const error = await res.json().catch(() => ({}));
+        toast.error(error.error || 'Failed to create reminder');
       }
     } catch (err) {
       toast.error('Error scheduling follow-up');
@@ -288,6 +336,69 @@ export default function LeadDetailPage() {
       }
     } catch (err) {
       toast.error('Error completing follow-up');
+    }
+  };
+
+  const handleFollowupStatusChange = async (fId: string, status: 'Planned' | 'Pending' | 'Completed') => {
+    try {
+      const res = await fetch(`/api/customers/${id}/followups`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ followUpId: fId, status })
+      });
+      if (!res.ok) throw new Error('Unable to update visit status');
+      toast.success(`Visit marked ${status.toLowerCase()}`);
+      const [followResponse, visitResponse, timelineResponse] = await Promise.all([
+        fetch(`/api/customers/${id}/followups`), fetch(`/api/customers/${id}/visits`), fetch(`/api/customers/${id}/timeline`)
+      ]);
+      if (followResponse.ok) setFollowups(await followResponse.json());
+      if (visitResponse.ok) setVisits(await visitResponse.json());
+      if (timelineResponse.ok) setTimeline(await timelineResponse.json());
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to update visit status');
+    }
+  };
+
+  const handleAddVisit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const property = visitProperties.find((item) => item._id === selectedVisitPropertyId);
+    if (!property || !visitDate || !visitTime) {
+      toast.error('Select a property and enter the visit date and time');
+      return;
+    }
+
+    try {
+      setVisitSubmitting(true);
+      const res = await fetch(`/api/customers/${id}/visits`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          propertyId: property._id,
+          propertyName: property.propertyName,
+          projectName: property.projectName || '',
+          location: property.location || '',
+          visitedAt: new Date(`${visitDate}T${visitTime}`).toISOString(),
+          notes: visitNotes.trim()
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Unable to save visit');
+
+      setVisits((current) => [data, ...current].sort((a, b) => +new Date(b.visitedAt) - +new Date(a.visitedAt)));
+      setSelectedVisitPropertyId('');
+      setVisitDate('');
+      setVisitTime('');
+      setVisitNotes('');
+      toast.success('Property visit marked as visited');
+
+      const resTime = await fetch(`/api/customers/${id}/timeline`);
+      if (resTime.ok) setTimeline(await resTime.json());
+      setCustomer((current: any) => current && !['Sold', 'Lost'].includes(current.leadStatus)
+        ? { ...current, leadStatus: 'Site Visit' }
+        : current);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to save visit');
+    } finally {
+      setVisitSubmitting(false);
     }
   };
 
@@ -444,41 +555,6 @@ export default function LeadDetailPage() {
     }
   };
 
-  // Property Matching Algorithm
-  const getMatchingProperties = () => {
-    if (!customer || properties.length === 0) return [];
-    
-    // Parse Customer preferences
-    const budgetVal = customer.budget;
-    const prefLocations = customer.preferredLocations || [];
-    const intent = customer.purpose;
-
-    return properties.filter(prop => {
-      // 1. Match status: must be Available or Booked (not Sold)
-      if (prop.status === 'Sold') return false;
-
-      // 2. Match intent/purpose if matched (but mostly any property is fine, checking location is priority)
-      
-      // 3. Match Location: checks if property road matches preferred locations
-      const locationMatch = prefLocations.includes(prop.road);
-
-      // 4. Match Budget (loose price boundaries)
-      let priceMatch = false;
-      const price = prop.price;
-      
-      if (budgetVal === '10 Lakh') priceMatch = price <= 1500000;
-      else if (budgetVal === '20 Lakh') priceMatch = price > 1000000 && price <= 2600000;
-      else if (budgetVal === '30 Lakh') priceMatch = price > 2000000 && price <= 3800000;
-      else if (budgetVal === '50 Lakh') priceMatch = price > 3500000 && price <= 6500000;
-      else if (budgetVal === '1 Crore') priceMatch = price > 6000000 && price <= 18000000;
-
-      // Return true if location or budget matches
-      return locationMatch && priceMatch;
-    });
-  };
-
-  const matchedProperties = getMatchingProperties();
-
   // WhatsApp Pre-filled message URL generator
   const getWhatsAppLink = () => {
     if (!customer) return '';
@@ -495,6 +571,11 @@ export default function LeadDetailPage() {
       </div>
     );
   }
+
+  const matchingLocations = Array.from(new Set([
+    ...(customer.preferredLocations || []),
+    ...matchedProperties.flatMap((property) => [property.location, property.road]).filter(Boolean),
+  ]));
 
   return (
     <div className="space-y-6">
@@ -657,11 +738,11 @@ export default function LeadDetailPage() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-[var(--muted)]">Deal Amount</span>
-                  <span className="font-semibold">₹{soldRecord.totalAmount.toLocaleString()}</span>
+                  <span className="font-semibold">{formatINR(soldRecord.totalAmount)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-[var(--muted)]">Down Payment Paid</span>
-                  <span className="font-semibold text-green-500">₹{soldRecord.downPayment.toLocaleString()}</span>
+                  <span className="font-semibold text-green-500">{formatINR(soldRecord.downPayment)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-[var(--muted)]">Agreement Status</span>
@@ -774,6 +855,10 @@ export default function LeadDetailPage() {
           {/* Add Followup mini form */}
           <form onSubmit={handleAddFollowup} className="p-3 bg-[var(--background)] border border-[var(--border)] rounded-xl mb-4 space-y-2">
             <div className="grid grid-cols-2 gap-2">
+              <select value={fType} onChange={(e) => { setFType(e.target.value as 'Follow-up' | 'Property Visit'); setFPropertyId(''); }} className="col-span-2 p-1.5 border rounded-lg text-xs bg-[var(--card)] border-[var(--border)] focus:outline-none">
+                <option value="Follow-up">Regular Follow-up</option>
+                <option value="Property Visit">Property Visit</option>
+              </select>
               <input
                 type="text"
                 placeholder="Title: 'Call...'"
@@ -787,6 +872,12 @@ export default function LeadDetailPage() {
                 onChange={(e) => setFDate(e.target.value)}
                 className="p-1.5 border rounded-lg text-xs bg-[var(--card)] border-[var(--border)] focus:outline-none"
               />
+              {fType === 'Property Visit' && (
+                <select value={fPropertyId} onChange={(e) => setFPropertyId(e.target.value)} className="col-span-2 p-1.5 border rounded-lg text-xs bg-[var(--card)] border-[var(--border)] focus:outline-none">
+                  <option value="">Select available property / project</option>
+                  {visitProperties.map((property) => <option key={property._id} value={property._id}>{property.propertyName}{property.projectName ? ` — ${property.projectName}` : ''} · {property.location}</option>)}
+                </select>
+              )}
               <input
                 type="time"
                 value={fTime}
@@ -816,7 +907,7 @@ export default function LeadDetailPage() {
               disabled={fSubmit}
               className="w-full py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold cursor-pointer flex justify-center items-center gap-1"
             >
-              <Plus className="h-3.5 w-3.5" /> Book follow-up
+              <Plus className="h-3.5 w-3.5" /> {fType === 'Property Visit' ? 'Plan property visit' : 'Book follow-up'}
             </button>
           </form>
 
@@ -831,7 +922,7 @@ export default function LeadDetailPage() {
                 <div key={task._id} className="p-2.5 bg-[var(--background)] border border-[var(--border)] rounded-lg flex items-center justify-between gap-2.5">
                   <div className="min-w-0">
                     <h5 className={`text-xs font-semibold truncate ${task.status === 'Completed' ? 'line-through text-[var(--muted)]' : ''}`}>
-                      {task.title}
+                      {task.type === 'Property Visit' ? `Property Visit: ${task.projectName || task.propertyName}` : task.title}
                     </h5>
                     <p className="text-[10px] text-[var(--muted)] truncate">
                       {new Date(task.date).toLocaleDateString()} at {task.time} | Priority:{' '}
@@ -845,8 +936,11 @@ export default function LeadDetailPage() {
                     </p>
                     {task.remark && <p className="text-[10px] italic text-[var(--muted)] mt-0.5">&quot;{task.remark}&quot;</p>}
                   </div>
-                  
-                  {task.status === 'Pending' ? (
+                  {task.type === 'Property Visit' ? (
+                    <select value={task.status} onChange={(event) => handleFollowupStatusChange(task._id, event.target.value as 'Planned' | 'Pending' | 'Completed')} className={`shrink-0 rounded border border-[var(--border)] bg-[var(--card)] p-1 text-[10px] font-bold ${task.status === 'Completed' ? 'text-green-500' : task.status === 'Pending' ? 'text-amber-500' : 'text-blue-500'}`}>
+                      <option value="Planned">🔵 Planned</option><option value="Pending">🟠 Pending</option><option value="Completed">🟢 Completed</option>
+                    </select>
+                  ) : task.status === 'Pending' ? (
                     <button
                       onClick={() => handleCompleteFollowup(task._id)}
                       className="p-1 rounded bg-[var(--card)] border border-[var(--border)] text-green-500 hover:bg-green-500/10 cursor-pointer"
@@ -874,17 +968,26 @@ export default function LeadDetailPage() {
             </span>
           </h3>
 
+          <div className="mb-3 grid grid-cols-2 gap-2 text-[10px] sm:grid-cols-4">
+            <select value={matchSort} onChange={(event) => setMatchSort(event.target.value)} className="rounded-lg border border-[var(--border)] bg-[var(--background)] p-2"><option value="match">Best match</option><option value="price-asc">Price: Low to High</option><option value="price-desc">Price: High to Low</option><option value="newest">Newest</option><option value="oldest">Oldest</option></select>
+            <select value={matchLocation} onChange={(event) => setMatchLocation(event.target.value)} className="rounded-lg border border-[var(--border)] bg-[var(--background)] p-2"><option value="">Preferred locations</option>{matchingLocations.map((location) => <option key={location} value={location}>{location}</option>)}</select>
+            <select value={matchPropertyType} onChange={(event) => setMatchPropertyType(event.target.value)} className="rounded-lg border border-[var(--border)] bg-[var(--background)] p-2"><option value="">All property types</option>{PROPERTY_CATEGORY_OPTIONS.map((type) => <option key={type} value={type}>{type}</option>)}</select>
+            <select value={matchTolerance} onChange={(event) => setMatchTolerance(event.target.value as 'tolerant' | 'strict')} className="rounded-lg border border-[var(--border)] bg-[var(--background)] p-2"><option value="tolerant">Budget ±10%</option><option value="strict">Strict budget</option></select>
+          </div>
+
           <div className="flex-1 overflow-y-auto space-y-3 pr-1">
-            {matchedProperties.length === 0 ? (
+            {matchingLoading ? (
+              <div className="flex justify-center py-16"><Loader2 className="h-5 w-5 animate-spin text-blue-500" /></div>
+            ) : matchedProperties.length === 0 ? (
               <div className="text-center text-xs text-[var(--muted)] py-16">
-                No properties in database match the client's current budget and location preferences.
+                No matching properties found for this customer.
               </div>
             ) : (
               matchedProperties.map((prop) => (
                 <div key={prop._id} className="p-3 bg-[var(--background)] border border-[var(--border)] rounded-xl space-y-2">
                   <div className="flex justify-between items-start">
                     <h4 className="text-xs font-bold text-[var(--foreground)]">{prop.propertyName}</h4>
-                    <span className="text-xs font-bold text-blue-500">₹{(prop.price / 100000).toFixed(1)} Lakh</span>
+                    <span className="text-xs font-bold text-blue-500">{formatINR(prop.price)}</span>
                   </div>
                   
                   <div className="grid grid-cols-2 gap-1 text-[10px] text-[var(--muted)]">
@@ -895,6 +998,7 @@ export default function LeadDetailPage() {
                       <Compass className="h-3 w-3" /> {prop.facing} Facing
                     </div>
                     <div>• {prop.squareYard} Sq Yards</div>
+                    <div>{formatINR(prop.pricePerSquareYard || 0)} / sq. yd</div>
                     <div className="flex gap-1.5">
                       {prop.jdaApproved && <span className="text-[9px] font-semibold text-emerald-500">JDA</span>}
                       {prop.rera && <span className="text-[9px] font-semibold text-emerald-500">RERA</span>}
@@ -907,6 +1011,7 @@ export default function LeadDetailPage() {
                     }`}>
                       {prop.status}
                     </span>
+                    <span className="font-semibold text-blue-500">Match: {prop.matchScore}%</span>
                     {prop.googleMapLink && (
                       <a 
                         href={prop.googleMapLink} 
@@ -920,6 +1025,66 @@ export default function LeadDetailPage() {
                   </div>
                 </div>
               ))
+            )}
+          </div>
+        </div>
+
+        {/* Property visits */}
+        <div className="lg:col-span-12 p-4 bg-[var(--card)] border border-[var(--border)] rounded-xl space-y-4">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--muted)] pb-2 border-b border-[var(--border)] flex items-center justify-between">
+            <span className="flex items-center gap-1.5"><Building className="h-4 w-4" /> Property Visit</span>
+            <span className="text-[10px] text-emerald-500 bg-emerald-500/10 px-1.5 py-0.5 rounded font-semibold">
+              {visits.length} {visits.length === 1 ? 'Visit' : 'Visits'} logged
+            </span>
+          </h3>
+
+          <form onSubmit={handleAddVisit} className="grid grid-cols-1 gap-2 rounded-xl border border-[var(--border)] bg-[var(--background)] p-3 md:grid-cols-12">
+            <select
+              value={selectedVisitPropertyId}
+              onChange={(event) => setSelectedVisitPropertyId(event.target.value)}
+              className="md:col-span-5 rounded-lg border border-[var(--border)] bg-[var(--card)] p-2 text-xs focus:outline-none"
+            >
+              <option value="">Select property / project to mark visited</option>
+              {visitProperties.map((property) => (
+                <option key={property._id} value={property._id}>
+                  {property.propertyName}{property.projectName ? ` — ${property.projectName}` : ''} · {property.location} {property.matchScore ? `(${property.matchScore}% match)` : ''}
+                </option>
+              ))}
+            </select>
+            <input type="date" value={visitDate} onChange={(event) => setVisitDate(event.target.value)} className="md:col-span-2 rounded-lg border border-[var(--border)] bg-[var(--card)] p-2 text-xs focus:outline-none" />
+            <input type="time" value={visitTime} onChange={(event) => setVisitTime(event.target.value)} className="md:col-span-2 rounded-lg border border-[var(--border)] bg-[var(--card)] p-2 text-xs focus:outline-none" />
+            <input
+              value={visitNotes}
+              onChange={(event) => setVisitNotes(event.target.value)}
+              placeholder="Customer feedback / interest level"
+              className="md:col-span-3 rounded-lg border border-[var(--border)] bg-[var(--card)] p-2 text-xs focus:outline-none"
+            />
+            <div className="md:col-span-12 flex items-center justify-between gap-3">
+              <p className="text-[10px] text-[var(--muted)]">Recommended properties appear first, followed by all available inventory.</p>
+              <button type="submit" disabled={visitSubmitting || visitProperties.length === 0} className="flex shrink-0 items-center gap-1 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-500 disabled:opacity-50">
+                <Check className="h-3.5 w-3.5" /> {visitSubmitting ? 'Saving...' : 'Mark Visited'}
+              </button>
+            </div>
+          </form>
+
+          <div className="space-y-2">
+            <h4 className="text-[10px] font-bold uppercase tracking-wider text-[var(--muted)]">Visit History</h4>
+            {visits.length === 0 ? (
+              <p className="rounded-lg bg-[var(--background)] p-4 text-center text-xs text-[var(--muted)]">No property visits have been recorded for this customer.</p>
+            ) : (
+              <div className="max-h-56 space-y-2 overflow-y-auto pr-1">
+                {visits.map((visit) => (
+                  <div key={visit._id} className="flex flex-col gap-1 rounded-lg border border-[var(--border)] bg-[var(--background)] p-3 text-xs sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                    <div>
+                      <p className="font-semibold">{visit.propertyName}{visit.projectName ? ` · ${visit.projectName}` : ''}</p>
+                      <p className="mt-0.5 text-[10px] text-[var(--muted)]">{visit.location || 'Location not recorded'}</p>
+                      <p className="mt-1 text-[10px] text-[var(--muted)]">Planned: {visit.plannedVisitAt ? new Date(visit.plannedVisitAt).toLocaleString() : 'Not scheduled'} · Actual: {new Date(visit.actualVisitAt || visit.visitedAt).toLocaleString()}</p>
+                      <span className="mt-1 inline-block rounded bg-emerald-500/10 px-1.5 py-0.5 text-[9px] font-bold text-emerald-500">🟢 {visit.status || 'Completed'}</span>
+                      {visit.notes && <p className="mt-1 text-[11px] italic text-[var(--foreground)]">“{visit.notes}”</p>}
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         </div>
@@ -1316,19 +1481,19 @@ export default function LeadDetailPage() {
               <div className="p-3 bg-[var(--background)] border border-[var(--border)] rounded-xl space-y-1 text-xs">
                 <div className="flex justify-between font-bold">
                   <span>Gross Deal Amount:</span>
-                  <span>₹{calculatedTotal.toLocaleString()}</span>
+                  <span>{formatINR(calculatedTotal)}</span>
                 </div>
                 <div className="flex justify-between text-[var(--muted)]">
                   <span>Paid (Booking + Down Payment):</span>
-                  <span>₹{(soldBookingAmtValue + soldDownPmtValue).toLocaleString()}</span>
+                  <span>{formatINR(soldBookingAmtValue + soldDownPmtValue)}</span>
                 </div>
                 <div className="flex justify-between text-[var(--muted)] border-b pb-1.5">
                   <span>Bank Finance (Loan):</span>
-                  <span>₹{soldLoanAmtValue.toLocaleString()}</span>
+                  <span>{formatINR(soldLoanAmtValue)}</span>
                 </div>
                 <div className="flex justify-between font-bold text-red-500 pt-1">
                   <span>Remaining Balance:</span>
-                  <span>₹{calculatedRemaining.toLocaleString()}</span>
+                  <span>{formatINR(calculatedRemaining)}</span>
                 </div>
               </div>
 

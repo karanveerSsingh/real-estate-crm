@@ -3,6 +3,8 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/authOptions';
 import connectDB from '@/lib/db';
 import Property from '@/models/Property';
+import Customer from '@/models/Customer';
+import { rankPropertiesForCustomer } from '@/lib/matching';
 
 export async function GET(request: Request) {
   try {
@@ -18,6 +20,7 @@ export async function GET(request: Request) {
     const facing = searchParams.get('facing') || '';
     const jda = searchParams.get('jda') || '';
     const rera = searchParams.get('rera') || '';
+    const customerId = searchParams.get('customerId') || '';
 
     await connectDB();
 
@@ -40,7 +43,12 @@ export async function GET(request: Request) {
     if (jda) query.jdaApproved = jda === 'true';
     if (rera) query.rera = rera === 'true';
 
-    const properties = await Property.find(query).sort({ createdAt: -1 });
+    const properties = await Property.find(query).sort({ createdAt: -1 }).lean();
+    if (customerId) {
+      const customer = await Customer.findById(customerId).lean();
+      if (!customer) return NextResponse.json({ error: 'Customer not found' }, { status: 404 });
+      return NextResponse.json(rankPropertiesForCustomer(customer as any, properties as any));
+    }
     return NextResponse.json(properties);
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

@@ -5,6 +5,8 @@ import connectDB from '@/lib/db';
 import FollowUp from '@/models/FollowUp';
 import Activity from '@/models/Activity';
 import Notification from '@/models/Notification';
+import CustomerVisit from '@/models/CustomerVisit';
+import Customer from '@/models/Customer';
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -32,9 +34,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     const { id } = await params;
     const body = await request.json();
-    const { title, date, time, remark, priority } = body;
+    const { title, date, time, remark, priority, type, propertyId, propertyName, projectName, location, status } = body;
 
-    if (!title || !date || !time) {
+    if (!title || !date || !time || (type === 'Property Visit' && (!propertyId || !propertyName))) {
       return NextResponse.json({ error: 'Title, date, and time are required' }, { status: 400 });
     }
 
@@ -48,14 +50,21 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       time,
       remark,
       priority,
-      status: 'Pending'
+      status: type === 'Property Visit' ? (status || 'Planned') : 'Pending',
+      type: type === 'Property Visit' ? 'Property Visit' : 'Follow-up',
+      propertyId: propertyId || null,
+      propertyName: propertyName || '',
+      projectName: projectName || '',
+      location: location || ''
     });
 
     // Log Activity
     await Activity.create({
       customerId: id,
-      type: 'Called',
-      description: `Scheduled follow-up: "${title}" for ${date} at ${time}.`
+      type: type === 'Property Visit' ? 'Site Visit' : 'Called',
+      description: type === 'Property Visit'
+        ? `Planned property visit: ${projectName || propertyName} for ${date} at ${time}.`
+        : `Scheduled follow-up: "${title}" for ${date} at ${time}.`
     });
 
     // Add In-App Notification
@@ -108,12 +117,36 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       return NextResponse.json({ error: 'FollowUp not found' }, { status: 404 });
     }
 
-    // Log complete activity
+    if (followUp.type === 'Property Visit' && status === 'Completed' && !followUp.customerVisitId) {
+      const plannedVisitAt = new Date(`${new Date(followUp.date).toISOString().slice(0, 10)}T${followUp.time}`);
+      const actualVisitAt = new Date();
+      const visit = await CustomerVisit.create({
+        customerId: id,
+        propertyId: followUp.propertyId,
+        propertyName: followUp.propertyName,
+        projectName: followUp.projectName,
+        location: followUp.location,
+        plannedVisitAt,
+        actualVisitAt,
+        visitedAt: actualVisitAt,
+        status: 'Completed',
+        followUpId: followUp._id,
+        notes: followUp.remark || ''
+      });
+      followUp.customerVisitId = visit._id;
+      followUp.actualVisitAt = actualVisitAt;
+      await followUp.save();
+      await Customer.updateOne({ _id: id, leadStatus: { $nin: ['Sold', 'Lost'] } }, { leadStatus: 'Site Visit' });
+    }
+
+    // Log status updates
     if (status === 'Completed') {
       await Activity.create({
         customerId: id,
-        type: 'Follow-up Done',
-        description: `Completed follow-up task: "${followUp.title}".`
+        type: followUp.type === 'Property Visit' ? 'Site Visit' : 'Follow-up Done',
+        description: followUp.type === 'Property Visit'
+          ? `Completed property visit: ${followUp.projectName || followUp.propertyName}.`
+          : `Completed follow-up task: "${followUp.title}".`
       });
     }
 

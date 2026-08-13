@@ -89,7 +89,8 @@ const getPropertyMedia = (property: { gallery?: GalleryMedia[]; galleryImages?: 
 export default function InventoryPage() {
   const router = useRouter();
   const [properties, setProperties] = useState<any[]>([]);
-  const [leads, setLeads] = useState<any[]>([]);
+  const [matchingLeads, setMatchingLeads] = useState<any[]>([]);
+  const [matchingLeadsLoading, setMatchingLeadsLoading] = useState(false);
   const [loading, setLoading] = useState(true);
 
   // Search & Filter state
@@ -118,11 +119,26 @@ export default function InventoryPage() {
   useEffect(() => {
     setCarouselIndex(0);
     setUnavailableMedia([]);
+    if (!selectedProperty?._id) {
+      setMatchingLeads([]);
+      return;
+    }
+    let active = true;
+    setMatchingLeadsLoading(true);
+    fetch(`/api/matches/property/${selectedProperty._id}`)
+      .then(async (response) => {
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Unable to match customers');
+        return data.matches || [];
+      })
+      .then((matches) => { if (active) setMatchingLeads(matches); })
+      .catch((error) => { if (active) { setMatchingLeads([]); toast.error(error instanceof Error ? error.message : 'Unable to match customers'); } })
+      .finally(() => { if (active) setMatchingLeadsLoading(false); });
+    return () => { active = false; };
   }, [selectedProperty]);
 
   useEffect(() => {
     fetchProperties();
-    fetchLeads();
   }, []);
 
   const fetchProperties = async () => {
@@ -146,14 +162,6 @@ export default function InventoryPage() {
     }
   };
 
-  const fetchLeads = async () => {
-    try {
-      const res = await fetch('/api/customers');
-      if (res.ok) setLeads(await res.json());
-    } catch (err) {
-      console.error(err);
-    }
-  };
 
   const handleSearchKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') fetchProperties();
@@ -398,34 +406,6 @@ export default function InventoryPage() {
   const markMediaUnavailable = (url: string) => {
     setUnavailableMedia((current) => current.includes(url) ? current : [...current, url]);
   };
-
-  // Reverse Matching Engine: Find Leads matching selected property
-  const getMatchingLeads = (property: any) => {
-    if (!property || leads.length === 0) return [];
-    
-    return leads.filter(lead => {
-      // Must not be Sold or Lost
-      if (lead.leadStatus === 'Sold' || lead.leadStatus === 'Lost') return false;
-
-      // Match preferred locations
-      const locationMatch = lead.preferredLocations?.includes(property.road);
-
-      // Match budget range loosely
-      let priceMatch = false;
-      const budgetVal = lead.budget;
-      const price = property.price;
-
-      if (budgetVal === '10 Lakh') priceMatch = price <= 1500000;
-      else if (budgetVal === '20 Lakh') priceMatch = price > 1000000 && price <= 2600000;
-      else if (budgetVal === '30 Lakh') priceMatch = price > 2000000 && price <= 3800000;
-      else if (budgetVal === '50 Lakh') priceMatch = price > 3500000 && price <= 6500000;
-      else if (budgetVal === '1 Crore') priceMatch = price > 6000000 && price <= 18000000;
-
-      return locationMatch || priceMatch;
-    }).sort((a, b) => b.leadScore - a.leadScore); // Sort by highest lead score first!
-  };
-
-  const matchingLeads = getMatchingLeads(selectedProperty);
 
   return (
     <div className="space-y-6">
@@ -744,9 +724,11 @@ export default function InventoryPage() {
                 </span>
 
                 <div className="space-y-1.5 max-h-[180px] overflow-y-auto pr-1">
-                  {matchingLeads.length === 0 ? (
+                  {matchingLeadsLoading ? (
+                    <div className="flex justify-center p-5"><Loader2 className="h-4 w-4 animate-spin text-blue-500" /></div>
+                  ) : matchingLeads.length === 0 ? (
                     <div className="text-[10px] text-[var(--muted)] italic p-2 bg-[var(--background)] rounded-xl border text-center">
-                      No active matching leads found for this price/road combo.
+                      No matching customers found for this property.
                     </div>
                   ) : (
                     matchingLeads.map((lead) => (
@@ -757,11 +739,10 @@ export default function InventoryPage() {
                       >
                         <div>
                           <p className="font-semibold">{lead.fullName}</p>
-                          <p className="text-[9px] text-[var(--muted)]">Budget: {lead.budget} | Score: {lead.leadScore}</p>
+                          <p className="text-[9px] text-[var(--muted)]">{lead.mobileNumber} · {lead.purpose} · {lead.budget}</p>
+                          <p className="text-[9px] text-[var(--muted)]">{lead.preferredLocations?.join(', ')} · {lead.leadStatus}</p>
                         </div>
-                        <span className="text-[9px] text-blue-500 font-semibold flex items-center">
-                          Profile <ChevronRight className="h-3 w-3" />
-                        </span>
+                        <span className="text-[9px] text-blue-500 font-semibold text-right">Match: {lead.matchScore}%<span className="flex items-center">Profile <ChevronRight className="h-3 w-3" /></span></span>
                       </div>
                     ))
                   )}
@@ -806,26 +787,6 @@ export default function InventoryPage() {
                     className="w-full p-2 border rounded-xl text-xs bg-[var(--background)] border-[var(--border)] focus:outline-none"
                   />
                   {errors.propertyName && <p className="text-red-400 text-[10px]">{errors.propertyName.message}</p>}
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-[var(--muted)] uppercase">Project / Society Name</label>
-                  <input
-                    {...register('projectName')}
-                    type="text"
-                    placeholder="Apex Greens"
-                    className="w-full p-2 border rounded-xl text-xs bg-[var(--background)] border-[var(--border)] focus:outline-none"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-[var(--muted)] uppercase">Society Name</label>
-                  <input
-                    {...register('societyName')}
-                    type="text"
-                    placeholder="Phase II Block A"
-                    className="w-full p-2 border rounded-xl text-xs bg-[var(--background)] border-[var(--border)] focus:outline-none"
-                  />
                 </div>
 
                 <div className="space-y-1">

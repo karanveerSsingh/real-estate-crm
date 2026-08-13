@@ -10,6 +10,7 @@ import {
   HandCoins, 
   Building2, 
   Calendar, 
+  CalendarHeart,
   Settings, 
   LogOut, 
   ChevronLeft, 
@@ -33,6 +34,7 @@ export default function Sidebar({ collapsed, setCollapsed, onClose }: SidebarPro
     { name: 'Sold Customers', path: '/dashboard/sold', icon: HandCoins },
     { name: 'Property Inventory', path: '/dashboard/inventory', icon: Building2 },
     { name: 'Follow-up Calendar', path: '/dashboard/calendar', icon: Calendar },
+    { name: 'Events', path: '/events', icon: CalendarHeart },
     { name: 'Settings', path: '/dashboard/settings', icon: Settings },
   ];
 

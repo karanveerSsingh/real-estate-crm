@@ -31,6 +31,9 @@ export default function CalendarPage() {
     time: string;
     status: string;
     priority: string;
+    type?: 'Follow-up' | 'Property Visit';
+    propertyName?: string;
+    projectName?: string;
     customerName?: string;
     customerId?: string;
   };
@@ -48,6 +51,9 @@ export default function CalendarPage() {
   const [newPriority, setNewPriority] = useState('Medium');
   const [newRemark, setNewRemark] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState('');
+  const [scheduleType, setScheduleType] = useState<'Follow-up' | 'Property Visit'>('Follow-up');
+  const [properties, setProperties] = useState<any[]>([]);
+  const [selectedProperty, setSelectedProperty] = useState('');
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [allCustomers, setAllCustomers] = useState<Customer[]>([]);
   const [scheduling, setScheduling] = useState(false);
@@ -94,15 +100,21 @@ export default function CalendarPage() {
     }
   };
 
+  const fetchProperties = async () => {
+    const res = await fetch('/api/properties?status=Available');
+    if (res.ok) setProperties(await res.json());
+  };
+
   useEffect(() => {
     void fetchFollowups();
     void fetchCustomers();
+    void fetchProperties();
   }, []);
 
   const handleQuickScheduleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedCustomer || !newTitle.trim() || !newTime) {
-      toast.error('Please select customer, title and time');
+    if (!selectedCustomer || (!newTitle.trim() && scheduleType !== 'Property Visit') || !newTime || (scheduleType === 'Property Visit' && !selectedProperty)) {
+      toast.error(scheduleType === 'Property Visit' ? 'Please select customer, property and time' : 'Please select customer, title and time');
       return;
     }
 
@@ -114,11 +126,17 @@ export default function CalendarPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          title: newTitle.trim(),
+          title: newTitle.trim() || 'Property Visit',
           date: dateString,
           time: newTime,
           remark: newRemark.trim(),
-          priority: newPriority
+          priority: newPriority,
+          type: scheduleType,
+          status: scheduleType === 'Property Visit' ? 'Planned' : 'Pending',
+          ...(scheduleType === 'Property Visit' ? (() => {
+            const property = properties.find((item) => item._id === selectedProperty);
+            return property ? { propertyId: property._id, propertyName: property.propertyName, projectName: property.projectName || '', location: property.location || '' } : {};
+          })() : {})
         })
       });
 
@@ -126,6 +144,7 @@ export default function CalendarPage() {
         toast.success('Follow-up scheduled on calendar');
         setNewTitle('');
         setNewRemark('');
+        setSelectedProperty('');
         fetchFollowups();
       } else {
         toast.error('Failed to schedule follow-up');
@@ -157,6 +176,17 @@ export default function CalendarPage() {
     } catch (err) {
       toast.error('Error completing task');
     }
+  };
+
+  const handleFollowupStatusChange = async (customerId: string, fId: string, status: 'Planned' | 'Pending' | 'Completed') => {
+    const res = await fetch(`/api/customers/${customerId}/followups`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ followUpId: fId, status })
+    });
+    if (res.ok) {
+      toast.success(`Visit marked ${status.toLowerCase()}`);
+      fetchFollowups();
+    } else toast.error('Failed to update visit status');
   };
 
   // Month navigation helpers
@@ -358,6 +388,7 @@ export default function CalendarPage() {
                 const dayFollowups = getFollowupsForDay(date);
                 const pendingTasks = dayFollowups.filter(f => f.status === 'Pending');
                 const completedTasks = dayFollowups.filter(f => f.status === 'Completed');
+                const plannedVisits = dayFollowups.filter(f => f.type === 'Property Visit' && f.status === 'Planned');
                 
                 const isSelected = isSameDay(date, selectedDate);
                 const isToday = isSameDay(date, new Date());
@@ -387,6 +418,7 @@ export default function CalendarPage() {
                     
                     {/* Event indicators */}
                     <div className="space-y-1">
+                      {plannedVisits.length > 0 && <div className="text-[9px] font-semibold text-blue-500 bg-blue-500/10 px-1 rounded truncate">🔵 {plannedVisits.length} Visit Planned</div>}
                       {pendingTasks.length > 0 && (
                         <div className="text-[9px] font-semibold text-amber-500 bg-amber-500/10 px-1 rounded truncate">
                           {pendingTasks.length} Pending
@@ -443,11 +475,13 @@ export default function CalendarPage() {
                           className={`p-1.5 rounded text-[9px] font-semibold truncate border ${
                             f.status === 'Completed' 
                               ? 'bg-green-500/5 text-green-500 border-green-500/10 line-through' 
-                              : 'bg-amber-500/5 text-amber-500 border-amber-500/10'
+                              : f.type === 'Property Visit' && f.status === 'Planned'
+                                ? 'bg-blue-500/5 text-blue-500 border-blue-500/10'
+                                : 'bg-amber-500/5 text-amber-500 border-amber-500/10'
                           }`}
                           title={f.title}
                         >
-                          {f.time} - {f.title}
+                          {f.time} - {f.type === 'Property Visit' ? `🔵 ${f.projectName || f.propertyName}` : f.title}
                         </div>
                       ))}
                       {dayFollowups.length > 3 && (
@@ -513,7 +547,7 @@ export default function CalendarPage() {
                       <div className="flex justify-between items-start gap-2">
                         <div>
                           <h5 className={`text-xs font-bold ${task.status === 'Completed' ? 'line-through text-[var(--muted)]' : ''}`}>
-                            {task.title}
+                            {task.type === 'Property Visit' ? `Property Visit: ${task.projectName || task.propertyName}` : task.title}
                           </h5>
                           <p className="text-[10px] text-[var(--muted)] mt-0.5">
                             Time: <span className="font-semibold">{task.time}</span> | Priority:{' '}
@@ -527,7 +561,11 @@ export default function CalendarPage() {
                           </p>
                         </div>
 
-                        {task.status === 'Pending' && task.customerId ? (
+                        {task.type === 'Property Visit' && task.customerId ? (
+                          <select value={task.status} onChange={(event) => handleFollowupStatusChange(task.customerId!, task._id, event.target.value as 'Planned' | 'Pending' | 'Completed')} className={`rounded border border-[var(--border)] bg-[var(--card)] p-1 text-[9px] font-bold ${task.status === 'Completed' ? 'text-green-500' : task.status === 'Pending' ? 'text-amber-500' : 'text-blue-500'}`}>
+                            <option value="Planned">🔵 Planned</option><option value="Pending">🟠 Pending</option><option value="Completed">🟢 Completed</option>
+                          </select>
+                        ) : task.status === 'Pending' && task.customerId ? (
                           <button
                             onClick={() => handleCompleteFollowup(task.customerId!, task._id)}
                             className="p-1 rounded bg-[var(--card)] border border-[var(--border)] text-green-500 hover:bg-green-500/10 cursor-pointer shrink-0"
@@ -567,6 +605,12 @@ export default function CalendarPage() {
             </h4>
 
             <form onSubmit={handleQuickScheduleSubmit} className="space-y-3">
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--muted)]">Schedule Type</label>
+                <select value={scheduleType} onChange={(e) => { setScheduleType(e.target.value as 'Follow-up' | 'Property Visit'); setSelectedProperty(''); }} className="w-full p-2 border rounded-xl text-xs bg-[var(--background)] border-[var(--border)] focus:outline-none">
+                  <option value="Follow-up">Regular Follow-up</option><option value="Property Visit">Property Visit</option>
+                </select>
+              </div>
               {/* Customer Selector */}
               <div className="space-y-1">
                 <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--muted)]">Target Customer</label>
@@ -583,6 +627,16 @@ export default function CalendarPage() {
                   ))}
                 </select>
               </div>
+
+              {scheduleType === 'Property Visit' && (
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--muted)]">Property / Project</label>
+                  <select value={selectedProperty} onChange={(e) => setSelectedProperty(e.target.value)} className="w-full p-2 border rounded-xl text-xs bg-[var(--background)] border-[var(--border)] focus:outline-none">
+                    <option value="">Select available property...</option>
+                    {properties.map((property) => <option key={property._id} value={property._id}>{property.propertyName}{property.projectName ? ` — ${property.projectName}` : ''} · {property.location}</option>)}
+                  </select>
+                </div>
+              )}
 
               {/* Title */}
               <div className="space-y-1">
@@ -636,7 +690,7 @@ export default function CalendarPage() {
 
               <button
                 type="submit"
-                disabled={scheduling || !selectedCustomer || !newTitle.trim()}
+                disabled={scheduling || !selectedCustomer || (scheduleType === 'Property Visit' ? !selectedProperty : !newTitle.trim())}
                 className="w-full py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold cursor-pointer shadow disabled:opacity-50"
               >
                 {scheduling ? 'Scheduling...' : `Book for ${selectedDate.toLocaleDateString('en-US', {month:'short', day:'numeric'})}`}

@@ -8,14 +8,15 @@ export function createDashboardFallback() {
       totalLeads: 0,
       newLeads: 0,
       interestedLeads: 0,
-      residentialLeads: 0,
-      investmentLeads: 0,
       todayFollowups: 0,
       tomorrowFollowups: 0,
       overdueFollowups: 0,
       totalSales: 0,
       totalRevenue: 0,
-      totalBookings: 0
+      totalBookings: 0,
+      todayPlannedVisits: 0,
+      todayCompletedVisits: 0,
+      todayPendingVisits: 0
     },
     widgets: {
       upcomingSiteVisits: [],
@@ -34,10 +35,6 @@ export function createDashboardFallback() {
         { location: 'Ajmer Road', Leads: 0 },
         { location: 'Diggi Road', Leads: 0 },
         { location: 'Tonk Road', Leads: 0 }
-      ],
-      ratio: [
-        { name: 'Residential', value: 0 },
-        { name: 'Investment', value: 0 }
       ]
     },
     warning: 'Database unavailable. Showing empty CRM data.'

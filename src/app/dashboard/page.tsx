@@ -30,14 +30,12 @@ import {
   Tooltip, 
   BarChart, 
   Bar, 
-  PieChart, 
-  Pie, 
-  Cell, 
   Legend 
 } from 'recharts';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import OverdueFollowupsModal from '@/components/OverdueFollowupsModal';
+import { formatINR } from '@/lib/crmOptions';
 
 export default function DashboardHome() {
   const [data, setData] = useState<any>(null);
@@ -49,6 +47,11 @@ export default function DashboardHome() {
   useEffect(() => {
     setMounted(true);
     fetchDashboardData();
+  }, []);
+
+  useEffect(() => {
+    const interval = setInterval(fetchDashboardData, 30000);
+    return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
@@ -121,8 +124,6 @@ export default function DashboardHome() {
   const endOfToday = new Date();
   endOfToday.setHours(23, 59, 59, 999);
 
-  const COLORS = ['#3b82f6', '#10b981'];
-
   return (
     <div className="space-y-6">
       
@@ -134,7 +135,7 @@ export default function DashboardHome() {
             {/* <Sparkles className="h-4.5 w-4.5 text-yellow-500 animate-spin" /> */}
           </h2>
           <p className="text-xs text-[var(--muted)] mt-1">
-            Your real estate sales funnel has generated <span className="font-semibold text-blue-500">{stats.totalSales} deals</span> closed and ₹{(stats.totalRevenue / 10000000).toFixed(2)} Cr in revenue.
+            Your real estate sales funnel has generated <span className="font-semibold text-blue-500">{stats.totalSales} deals</span> closed and {formatINR(stats.totalRevenue)} in revenue.
           </p>
         </div>
         <div className="flex gap-2">
@@ -170,19 +171,19 @@ export default function DashboardHome() {
           </div>
         </div>
 
-        {/* Categories Card */}
+        {/* Today's customer visits */}
         <div className="p-4 bg-[var(--card)] border border-[var(--border)] rounded-xl relative overflow-hidden group">
           <div className="flex justify-between items-start">
             <div className="space-y-1">
-              <span className="text-xs font-semibold text-[var(--muted)] uppercase">Product Purpose Ratio</span>
-              <h3 className="text-2xl font-bold">{stats.residentialLeads} : {stats.investmentLeads}</h3>
+              <span className="text-xs font-semibold text-[var(--muted)] uppercase">Today&apos;s Customer Visits</span>
+              <h3 className="text-2xl font-bold"><span className="text-green-500">{stats.todayCompletedVisits} Completed</span> / <span className="text-amber-500">{stats.todayPendingVisits} Pending</span></h3>
             </div>
             <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-500 group-hover:scale-110 transition-transform">
               <Building className="h-5 w-5" />
             </div>
           </div>
           <div className="text-[11px] text-[var(--muted)] mt-3 flex items-center gap-1">
-            <span className="font-semibold text-emerald-500">{stats.residentialLeads}</span> Residential / <span className="font-semibold text-blue-500">{stats.investmentLeads}</span> Investors
+            <span className="font-semibold text-blue-500">{stats.todayPlannedVisits} planned visits</span> scheduled for today
           </div>
         </div>
 
@@ -191,14 +192,14 @@ export default function DashboardHome() {
           <div className="flex justify-between items-start">
             <div className="space-y-1">
               <span className="text-xs font-semibold text-[var(--muted)] uppercase">Gross Revenue closed</span>
-              <h3 className="text-2xl font-bold">₹{(stats.totalRevenue / 100000).toFixed(1)} L</h3>
+              <h3 className="text-2xl font-bold">{formatINR(stats.totalRevenue)}</h3>
             </div>
             <div className="p-2 rounded-lg bg-indigo-500/10 text-indigo-500 group-hover:scale-110 transition-transform">
               <CircleDollarSign className="h-5 w-5" />
             </div>
           </div>
           <div className="text-[11px] text-[var(--muted)] mt-3 flex items-center gap-1.5">
-            Booking values: <span className="font-semibold text-indigo-400">₹{(stats.totalBookings / 100000).toFixed(1)} L</span> ({stats.totalSales} deals)
+            Booking values: <span className="font-semibold text-indigo-400">{formatINR(stats.totalBookings)}</span> ({stats.totalSales} deals)
           </div>
         </div>
 
@@ -261,10 +262,10 @@ export default function DashboardHome() {
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={graphs.monthlySales}>
                   <XAxis dataKey="name" stroke="var(--muted)" fontSize={10} />
-                  <YAxis stroke="var(--muted)" fontSize={10} tickFormatter={(v) => `₹${(v / 100000).toFixed(0)}L`} />
+                  <YAxis stroke="var(--muted)" fontSize={10} tickFormatter={formatINR} />
                   <Tooltip 
                     contentStyle={{ backgroundColor: 'var(--card)', borderColor: 'var(--border)', color: 'var(--foreground)', fontSize: 12 }}
-                    formatter={(value: any) => [`₹${Number(value).toLocaleString()}`, 'Closed Sales']}
+                    formatter={(value: unknown) => [formatINR(Number(Array.isArray(value) ? value[0] : value)), 'Closed Sales']}
                   />
                   <Bar dataKey="Sales" fill="#10b981" radius={[4, 4, 0, 0]} />
                 </BarChart>
@@ -289,43 +290,6 @@ export default function DashboardHome() {
             </div>
           </div>
 
-          {/* Investment vs Residential Ratio */}
-          <div className="p-4 bg-[var(--card)] border border-[var(--border)] rounded-xl">
-            <h3 className="text-sm font-bold text-[var(--foreground)] mb-4">Investment vs Residential Intent</h3>
-            <div className="h-64 flex flex-col sm:flex-row items-center justify-center">
-              <div className="h-48 w-48 relative">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={graphs.ratio}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={50}
-                      outerRadius={70}
-                      paddingAngle={3}
-                      dataKey="value"
-                    >
-                      {graphs.ratio.map((entry: any, index: number) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip 
-                      contentStyle={{ backgroundColor: 'var(--card)', borderColor: 'var(--border)', color: 'var(--foreground)', fontSize: 12 }}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="space-y-2 mt-4 sm:mt-0 sm:ml-8">
-                {graphs.ratio.map((entry: any, index: number) => (
-                  <div key={entry.name} className="flex items-center gap-2 text-xs">
-                    <span className="h-3.5 w-3.5 rounded" style={{ backgroundColor: COLORS[index] }} />
-                    <span className="font-medium">{entry.name}:</span>
-                    <span className="text-[var(--muted)]">({entry.value} leads)</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
         </div>
       )}
 
@@ -450,7 +414,7 @@ export default function DashboardHome() {
                       {deal.projectName} | {deal.location}
                     </p>
                     <span className="text-[9px] text-green-500 bg-green-500/10 px-1 rounded font-semibold mt-1 inline-block">
-                      Amount: ₹{deal.totalAmount.toLocaleString()}
+                      Amount: {formatINR(deal.totalAmount)}
                     </span>
                   </div>
                   <Link 

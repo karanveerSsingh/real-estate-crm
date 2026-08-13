@@ -190,6 +190,7 @@ export default function Header({ sidebarCollapsed: _sidebarCollapsed, setSidebar
 
   // Humanize path for breadcrumbs
   const getPageTitle = () => {
+    if (pathname === '/events') return 'Events & Customer Sharing';
     if (pathname === '/dashboard') return 'Overview Dashboard';
     if (pathname.startsWith('/dashboard/leads')) {
       if (pathname.includes('/leads/')) return 'Lead Detail Profile';

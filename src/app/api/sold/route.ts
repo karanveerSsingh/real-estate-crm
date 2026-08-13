@@ -8,6 +8,7 @@ import Property from '@/models/Property';
 import Activity from '@/models/Activity';
 import Notification from '@/models/Notification';
 import { createErrorResponse } from '@/lib/apiFallbacks';
+import { formatINR } from '@/lib/crmOptions';
 
 export async function GET(request: Request) {
   try {
@@ -185,7 +186,7 @@ export async function POST(request: Request) {
     await Activity.create({
       customerId,
       type: 'Booked',
-      description: `Property booked: ${projectName} at ${location}. Amount: ₹${totalAmount}.`
+      description: `Property booked: ${projectName} at ${location}. Amount: ${formatINR(demandAmount)}.`
     });
 
     await Activity.create({
@@ -197,7 +198,7 @@ export async function POST(request: Request) {
     // 6. Create Notification
     await Notification.create({
       title: 'Deal Closed successfully',
-      message: `Property sold to ${customer.fullName} - ${projectName} (${location}) for ₹${totalAmount}.`,
+      message: `Property sold to ${customer.fullName} - ${projectName} (${location}) for ${formatINR(demandAmount)}.`,
       type: 'Booking',
       customerId,
       date: new Date()

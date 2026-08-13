@@ -34,22 +34,6 @@ export async function GET() {
     const totalLeads = await Customer.countDocuments();
     const newLeads = await Customer.countDocuments({ leadStatus: 'New' });
     const interestedLeads = await Customer.countDocuments({ leadStatus: 'Interested' });
-    // Fetch all leads' purposes to calculate intent dynamically with normalization
-    const allLeadsPurposes = await Customer.find({}, 'purpose');
-    let residentialLeads = 0;
-    let investmentLeads = 0;
-
-    allLeadsPurposes.forEach(lead => {
-      if (lead.purpose) {
-        const p = lead.purpose.toLowerCase().trim();
-        if (p.startsWith('invest') || p === 'commercial' || p === 'shop' || p === 'office') {
-          investmentLeads++;
-        } else {
-          residentialLeads++;
-        }
-      }
-    });
-
     // Follow-ups
     const todayFollowups = await FollowUp.countDocuments({
       status: 'Pending',
@@ -63,6 +47,10 @@ export async function GET() {
       status: 'Pending',
       date: { $lt: startOfToday }
     });
+    const todayVisitQuery = { type: 'Property Visit', date: { $gte: startOfToday, $lte: endOfToday } };
+    const todayPlannedVisits = await FollowUp.countDocuments(todayVisitQuery);
+    const todayCompletedVisits = await FollowUp.countDocuments({ ...todayVisitQuery, status: 'Completed' });
+    const todayPendingVisits = await FollowUp.countDocuments({ ...todayVisitQuery, status: { $in: ['Planned', 'Pending'] } });
 
     // Sales metrics
     const soldCustomers = await SoldCustomer.find();
@@ -154,25 +142,20 @@ export async function GET() {
       Leads: locationCounts[loc]
     }));
 
-    // D. Investment vs Residential Ratio
-    const ratioGraph = [
-      { name: 'Residential', value: residentialLeads },
-      { name: 'Investment', value: investmentLeads }
-    ];
-
     return NextResponse.json({
       stats: {
         totalLeads,
         newLeads,
         interestedLeads,
-        residentialLeads,
-        investmentLeads,
         todayFollowups,
         tomorrowFollowups,
         overdueFollowups,
         totalSales,
         totalRevenue,
-        totalBookings
+        totalBookings,
+        todayPlannedVisits,
+        todayCompletedVisits,
+        todayPendingVisits
       },
       widgets: {
         upcomingSiteVisits,
@@ -185,8 +168,7 @@ export async function GET() {
       graphs: {
         monthlyLeads: monthlyLeadsGraph,
         monthlySales: monthlySalesGraph,
-        locationWiseLeads: locationWiseLeadsGraph,
-        ratio: ratioGraph
+        locationWiseLeads: locationWiseLeadsGraph
       }
     });
   } catch (error: unknown) {

@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useRouter } from 'next/navigation';
+import { formatINR } from '@/lib/crmOptions';
 
 export default function SoldCustomersPage() {
   const router = useRouter();
@@ -194,19 +195,19 @@ export default function SoldCustomersPage() {
         <div className="space-y-1 text-xs">
           <span className="text-[var(--muted)] block">Gross Closed Value</span>
           <span className="text-lg font-bold text-emerald-500">
-            ₹{(calculateSum('totalAmount') / 100000).toFixed(1)} Lakh
+            {formatINR(calculateSum('totalAmount'))}
           </span>
         </div>
         <div className="space-y-1 text-xs">
           <span className="text-[var(--muted)] block">Collected (Booking + DP)</span>
           <span className="text-lg font-bold text-blue-500">
-            ₹{((calculateSum('bookingAmount') + calculateSum('downPayment')) / 100000).toFixed(1)} Lakh
+            {formatINR(calculateSum('bookingAmount') + calculateSum('downPayment'))}
           </span>
         </div>
         <div className="space-y-1 text-xs">
           <span className="text-[var(--muted)] block">Outstanding Receivable</span>
           <span className="text-lg font-bold text-red-500">
-            ₹{(calculateSum('remainingAmount') / 100000).toFixed(1)} Lakh
+            {formatINR(calculateSum('remainingAmount'))}
           </span>
         </div>
       </div>
@@ -283,9 +284,9 @@ export default function SoldCustomersPage() {
 
                     {/* Financial Summary */}
                     <td className="px-4 py-3.5 space-y-0.5">
-                      <div>Deal: <span className="font-semibold">₹{rec.totalAmount.toLocaleString()}</span></div>
+                      <div>Deal: <span className="font-semibold">{formatINR(rec.totalAmount)}</span></div>
                       <div className="text-[10px] text-[var(--muted)]">
-                        DP: ₹{rec.downPayment.toLocaleString()} | Bal: <span className="text-red-400 font-medium">₹{rec.remainingAmount.toLocaleString()}</span>
+                        DP: {formatINR(rec.downPayment)} | Bal: <span className="text-red-400 font-medium">{formatINR(rec.remainingAmount)}</span>
                       </div>
                     </td>
 
@@ -551,11 +552,11 @@ export default function SoldCustomersPage() {
               <div className="p-3 bg-[var(--background)] border border-[var(--border)] rounded-xl space-y-1 text-xs">
                 <div className="flex justify-between font-bold">
                   <span>Gross Deal Amount:</span>
-                  <span>₹{(editAmountValue(editYards) * editAmountValue(editRate)).toLocaleString()}</span>
+                  <span>{formatINR(editAmountValue(editYards) * editAmountValue(editRate))}</span>
                 </div>
                 <div className="flex justify-between text-red-500 font-bold border-t pt-1">
                   <span>Remaining Balance:</span>
-                  <span>₹{Math.max(0, (editAmountValue(editYards) * editAmountValue(editRate)) - editAmountValue(editBookingAmt) - editAmountValue(editDownPmt) - editAmountValue(editLoanAmt)).toLocaleString()}</span>
+                  <span>{formatINR(Math.max(0, (editAmountValue(editYards) * editAmountValue(editRate)) - editAmountValue(editBookingAmt) - editAmountValue(editDownPmt) - editAmountValue(editLoanAmt)))}</span>
                 </div>
               </div>
 
