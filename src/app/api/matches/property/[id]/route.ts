@@ -16,8 +16,22 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     if (!property) return NextResponse.json({ error: 'Property not found' }, { status: 404 });
     const locations = [property.location, property.road].filter(Boolean);
     const locationClauses = locations.map((value) => ({ preferredLocations: { $regex: escapeRegex(value), $options: 'i' } }));
-    const budgets = matchingBudgetOptions(property.price, tolerance);
-    const candidates = await Customer.find({ leadStatus: { $nin: ['Sold', 'Lost'] }, $or: [...locationClauses, { budget: { $in: budgets } }] }).lean().limit(200);
+    let budgets: string[] = [];
+    if (property.propertyType === 'Township') {
+      const availablePlots = (property.plots as any[])?.filter((p) => p.status === 'Available') || [];
+      const uniquePrices = Array.from(new Set(availablePlots.map((p) => p.price)));
+      const uniqueBudgets = new Set<string>();
+      uniquePrices.forEach((price) => {
+        matchingBudgetOptions(price, tolerance).forEach((b) => uniqueBudgets.add(b));
+      });
+      budgets = Array.from(uniqueBudgets);
+    } else {
+      budgets = matchingBudgetOptions(property.price, tolerance);
+    }
+    const candidates = await Customer.find({ 
+      leadStatus: { $nin: ['Sold', 'Lost'] }, 
+      $or: [...locationClauses, ...(budgets.length > 0 ? [{ budget: { $in: budgets } }] : [])] 
+    }).lean().limit(200);
     const matches = candidates.map((customer) => matchLeadForProperty(customer, property, tolerance)).filter((match): match is NonNullable<typeof match> => Boolean(match)).sort((a, b) => b.matchScore - a.matchScore);
     return NextResponse.json({ property, matches });
   } catch (error) {

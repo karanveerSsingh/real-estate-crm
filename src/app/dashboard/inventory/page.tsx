@@ -33,22 +33,24 @@ import toast from 'react-hot-toast';
 import { PROPERTY_CATEGORY_OPTIONS, ROAD_OPTIONS, formatINR } from '@/lib/crmOptions';
 
 const propertySchema = z.object({
+  propertyType: z.enum(['Individual', 'Township']).default('Individual'),
   propertyName: z.string().min(1, 'Property name is required'),
   projectName: z.string().optional().default(''),
   societyName: z.string().optional().default(''),
   developerName: z.string().optional().default(''),
-  propertyCategory: z.enum(PROPERTY_CATEGORY_OPTIONS).default('Plot'),
+  propertyCategory: z.string().default('Plot'),
   location: z.string().min(1, 'Location is required'),
-  road: z.enum(ROAD_OPTIONS),
-  squareYard: z.number().min(1, 'Square yards must be positive'),
-  facing: z.string().min(1, 'Facing direction is required (e.g. East, West)'),
+  road: z.string().optional().default(''),
+  squareYard: z.number().optional().default(0),
+  facing: z.string().optional().default(''),
   dimensions: z.string().optional().default(''),
   jdaApproved: z.boolean().default(false),
   rera: z.boolean().default(false),
   societyApproved: z.boolean().default(false),
-  pricePerSquareYard: z.number().min(0).default(0),
-  price: z.number().min(1, 'Price must be positive'),
-  status: z.enum(['Available', 'Booked', 'Sold']).default('Available'),
+  authorities: z.array(z.string()).default([]),
+  pricePerSquareYard: z.number().optional().default(0),
+  price: z.number().optional().default(0),
+  status: z.string().default('Available'),
   description: z.string().optional().default(''),
   googleMapLink: z.string().optional().default(''),
   amenities: z.array(z.string()).default([]),
@@ -59,6 +61,10 @@ const propertySchema = z.object({
     url: z.string(),
     thumbnail: z.string().optional()
   })).default([]),
+  totalLandArea: z.string().optional().default(''),
+  totalPlots: z.number().optional().default(0),
+  plotConfig: z.string().optional().default(''),
+  plots: z.array(z.any()).default([]),
 });
 
 type PropertyFormValues = z.infer<typeof propertySchema>;
@@ -115,6 +121,23 @@ export default function InventoryPage() {
   const [galleryInput, setGalleryInput] = useState('');
   const mediaInputRef = useRef<HTMLInputElement>(null);
   const mediaPreviewRef = useRef<HTMLDivElement>(null);
+
+  // Plot Form state inside Township drawer
+  const [showPlotForm, setShowPlotForm] = useState(false);
+  const [editingPlotId, setEditingPlotId] = useState<string | null>(null);
+  const [plotFormNumber, setPlotFormNumber] = useState('');
+  const [plotFormType, setPlotFormType] = useState<'Residential' | 'Commercial'>('Residential');
+  const [plotFormSize, setPlotFormSize] = useState('');
+  const [plotFormFacing, setPlotFormFacing] = useState<'North' | 'East' | 'South' | 'West'>('East');
+  const [plotFormRoadWidth, setPlotFormRoadWidth] = useState<'25 ft' | '30 ft' | '40 ft' | '60 ft' | '100 ft' | '150 ft'>('30 ft');
+  const [plotFormPrice, setPlotFormPrice] = useState<number>(0);
+  const [plotFormStatus, setPlotFormStatus] = useState<'Available' | 'Hold' | 'Sold' | 'Pending'>('Available');
+  const [plotFormRemarks, setPlotFormRemarks] = useState('');
+
+  // Township drawer filters/search
+  const [plotSearchQuery, setPlotSearchQuery] = useState('');
+  const [plotFilterType, setPlotFilterType] = useState('');
+  const [plotFilterStatus, setPlotFilterStatus] = useState('');
 
   useEffect(() => {
     setCarouselIndex(0);
@@ -178,6 +201,7 @@ export default function InventoryPage() {
   } = useForm<PropertyFormValues>({
     resolver: zodResolver(propertySchema) as any,
     defaultValues: {
+      propertyType: 'Individual',
       propertyName: '',
       projectName: '',
       societyName: '',
@@ -191,6 +215,7 @@ export default function InventoryPage() {
       jdaApproved: true,
       rera: true,
       societyApproved: false,
+      authorities: ['JDA', 'RERA'],
       pricePerSquareYard: 20000,
       price: 3000000,
       status: 'Available',
@@ -200,25 +225,32 @@ export default function InventoryPage() {
       nearbyLandmarks: [],
       galleryImages: [],
       gallery: [],
+      totalLandArea: '',
+      totalPlots: 0,
+      plotConfig: '',
+      plots: [],
     }
   });
 
+  const formPropertyType = watch('propertyType') || 'Individual';
   const formAmenities = watch('amenities') || [];
   const formLandmarks = watch('nearbyLandmarks') || [];
   const formGalleryImages = watch('galleryImages') || [];
   const formGallery = watch('gallery') || [];
   const formSquareYard = watch('squareYard') || 0;
   const formRate = watch('pricePerSquareYard') || 0;
+  const formAuthorities = watch('authorities') || [];
 
   useEffect(() => {
-    if (formSquareYard > 0 && formRate > 0) {
+    if (formPropertyType === 'Individual' && formSquareYard > 0 && formRate > 0) {
       setValue('price', formSquareYard * formRate, { shouldValidate: true });
     }
-  }, [formSquareYard, formRate, setValue]);
+  }, [formSquareYard, formRate, setValue, formPropertyType]);
 
   const handleOpenAddModal = () => {
     setEditingProperty(null);
     reset({
+      propertyType: 'Individual',
       propertyName: '',
       projectName: '',
       societyName: '',
@@ -232,6 +264,7 @@ export default function InventoryPage() {
       jdaApproved: true,
       rera: true,
       societyApproved: false,
+      authorities: ['JDA', 'RERA'],
       pricePerSquareYard: 20000,
       price: 3000000,
       status: 'Available',
@@ -241,6 +274,10 @@ export default function InventoryPage() {
       nearbyLandmarks: [],
       galleryImages: [],
       gallery: [],
+      totalLandArea: '',
+      totalPlots: 0,
+      plotConfig: '',
+      plots: [],
     });
     setModalOpen(true);
   };
@@ -248,28 +285,38 @@ export default function InventoryPage() {
   const handleOpenEditModal = (prop: any) => {
     setEditingProperty(prop);
     reset({
+      propertyType: prop.propertyType || 'Individual',
       propertyName: prop.propertyName,
       projectName: prop.projectName || '',
       societyName: prop.societyName || '',
       developerName: prop.developerName || '',
       propertyCategory: prop.propertyCategory || 'Plot',
       location: prop.location,
-      road: prop.road,
-      squareYard: prop.squareYard,
-      facing: prop.facing,
+      road: prop.road || '',
+      squareYard: prop.squareYard || 0,
+      facing: prop.facing || '',
       dimensions: prop.dimensions || '',
-      jdaApproved: prop.jdaApproved,
-      rera: prop.rera,
+      jdaApproved: prop.jdaApproved || false,
+      rera: prop.rera || false,
       societyApproved: prop.societyApproved || false,
-      pricePerSquareYard: prop.pricePerSquareYard || Math.round((prop.price || 0) / (prop.squareYard || 1)),
-      price: prop.price,
-      status: prop.status,
+      authorities: prop.authorities || [
+        ...(prop.jdaApproved ? ['JDA'] : []),
+        ...(prop.rera ? ['RERA'] : []),
+        ...(prop.societyApproved ? ['Registered Society'] : [])
+      ],
+      pricePerSquareYard: prop.pricePerSquareYard || 0,
+      price: prop.price || 0,
+      status: prop.status || 'Available',
       description: prop.description || '',
       googleMapLink: prop.googleMapLink || '',
       amenities: prop.amenities || [],
       nearbyLandmarks: prop.nearbyLandmarks || [],
       galleryImages: prop.galleryImages || [],
       gallery: getPropertyMedia(prop),
+      totalLandArea: prop.totalLandArea || '',
+      totalPlots: prop.totalPlots || 0,
+      plotConfig: prop.plotConfig || '',
+      plots: prop.plots || [],
     });
     setModalOpen(true);
   };
@@ -315,6 +362,137 @@ export default function InventoryPage() {
     } catch (err) {
       toast.error('Error deleting property');
     }
+  };
+
+  const toggleAuthority = (auth: string) => {
+    let newAuths = [...formAuthorities];
+    if (newAuths.includes(auth)) {
+      newAuths = newAuths.filter((item) => item !== auth);
+    } else {
+      newAuths.push(auth);
+    }
+    setValue('authorities', newAuths, { shouldDirty: true });
+    
+    // Backward compatibility flags
+    if (auth === 'JDA') setValue('jdaApproved', newAuths.includes('JDA'), { shouldDirty: true });
+    if (auth === 'RERA') setValue('rera', newAuths.includes('RERA'), { shouldDirty: true });
+    if (auth === 'Registered Society') setValue('societyApproved', newAuths.includes('Registered Society'), { shouldDirty: true });
+  };
+
+  const saveTownshipProperty = async (updatedProperty: any) => {
+    try {
+      const res = await fetch(`/api/properties/${updatedProperty._id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedProperty)
+      });
+      if (res.ok) {
+        const saved = await res.json();
+        setSelectedProperty(saved);
+        setProperties(prev => prev.map(p => p._id === saved._id ? saved : p));
+        toast.success('Township inventory updated');
+      } else {
+        toast.error('Failed to update township inventory');
+      }
+    } catch (err) {
+      toast.error('Error updating township');
+    }
+  };
+
+  const handleSavePlot = async () => {
+    if (!plotFormNumber.trim()) {
+      toast.error('Plot number is required');
+      return;
+    }
+    if (!plotFormSize.trim()) {
+      toast.error('Plot size is required');
+      return;
+    }
+    if (plotFormPrice <= 0) {
+      toast.error('Price must be greater than 0');
+      return;
+    }
+
+    let updatedPlots = [...(selectedProperty.plots || [])];
+
+    const plotData = {
+      plotNumber: plotFormNumber.trim(),
+      propertyType: plotFormType,
+      size: plotFormSize.trim(),
+      facing: plotFormFacing,
+      roadWidth: plotFormRoadWidth,
+      price: Number(plotFormPrice),
+      status: plotFormStatus,
+      remarks: plotFormRemarks.trim()
+    };
+
+    if (editingPlotId) {
+      updatedPlots = updatedPlots.map(p => 
+        (p._id === editingPlotId || p.plotNumber === editingPlotId) ? { ...p, ...plotData } : p
+      );
+    } else {
+      if (updatedPlots.some(p => p.plotNumber === plotData.plotNumber)) {
+        toast.error(`Plot number ${plotData.plotNumber} already exists in this township.`);
+        return;
+      }
+      updatedPlots.push(plotData);
+    }
+
+    const updatedProperty = { ...selectedProperty, plots: updatedPlots };
+    await saveTownshipProperty(updatedProperty);
+
+    setPlotFormNumber('');
+    setPlotFormSize('');
+    setPlotFormPrice(0);
+    setPlotFormRemarks('');
+    setEditingPlotId(null);
+    setShowPlotForm(false);
+  };
+
+  const handleDeletePlot = async (plotId: string, plotNum: string) => {
+    if (!confirm(`Are you sure you want to delete Plot ${plotNum}?`)) return;
+    const updatedPlots = (selectedProperty.plots || []).filter((p: any) => 
+      p._id !== plotId && p.plotNumber !== plotNum
+    );
+    const updatedProperty = { ...selectedProperty, plots: updatedPlots };
+    await saveTownshipProperty(updatedProperty);
+  };
+
+  const handleQuickSellPlot = async (plotId: string, plotNum: string) => {
+    const updatedPlots = (selectedProperty.plots || []).map((p: any) => 
+      (p._id === plotId || p.plotNumber === plotNum) ? { ...p, status: 'Sold' } : p
+    );
+    const updatedProperty = { ...selectedProperty, plots: updatedPlots };
+    await saveTownshipProperty(updatedProperty);
+  };
+
+  const handleQuickHoldPlot = async (plotId: string, plotNum: string) => {
+    const updatedPlots = (selectedProperty.plots || []).map((p: any) => 
+      (p._id === plotId || p.plotNumber === plotNum) ? { ...p, status: 'Hold' } : p
+    );
+    const updatedProperty = { ...selectedProperty, plots: updatedPlots };
+    await saveTownshipProperty(updatedProperty);
+  };
+
+  const handleUpdatePlotStatus = async (plotId: string, plotNum: string, newStatus: string) => {
+    const updatedPlots = (selectedProperty.plots || []).map((p: any) => 
+      (p._id === plotId || p.plotNumber === plotNum) ? { ...p, status: newStatus } : p
+    );
+    const updatedProperty = { ...selectedProperty, plots: updatedPlots };
+    await saveTownshipProperty(updatedProperty);
+  };
+
+  const handleTriggerEditPlot = (plot: any) => {
+    setEditingPlotId(plot._id || plot.plotNumber);
+    setPlotFormNumber(plot.plotNumber);
+    setPlotFormType(plot.propertyType);
+    setPlotFormSize(plot.size);
+    setPlotFormFacing(plot.facing);
+    setPlotFormRoadWidth(plot.roadWidth);
+    setPlotFormPrice(plot.price);
+    setPlotFormStatus(plot.status);
+    setPlotFormRemarks(plot.remarks || '');
+    setShowPlotForm(true);
   };
 
   // Tag list helpers
@@ -509,18 +687,28 @@ export default function InventoryPage() {
                 }`}
                 onClick={() => setSelectedProperty(prop)}
               >
-                {/* Header status badge */}
+                {/* Header status badge / type */}
                 <div className="flex justify-between items-start mb-2">
                   <span className={`text-[9px] px-2 py-0.5 rounded font-bold uppercase ${
+                    prop.propertyType === 'Township' ? 'bg-indigo-500/10 text-indigo-500 border border-indigo-500/20' :
                     prop.status === 'Available' ? 'bg-green-500/10 text-green-500' :
                     prop.status === 'Booked' ? 'bg-amber-500/10 text-amber-500' :
                     'bg-slate-500/10 text-[var(--muted)]'
                   }`}>
-                    {prop.status}
+                    {prop.propertyType === 'Township' ? 'Township / Project' : prop.status}
                   </span>
                   
                   <span className="text-sm font-extrabold text-blue-500">
-                    {formatINR(prop.price)}
+                    {prop.propertyType === 'Township' 
+                      ? (() => {
+                          const prices = (prop.plots || []).map((p: any) => p.price).filter((price: any) => typeof price === 'number' && price > 0);
+                          if (!prices.length) return 'Price on Request';
+                          const min = Math.min(...prices);
+                          const max = Math.max(...prices);
+                          return min === max ? formatINR(min) : `${formatINR(min)} - ${formatINR(max)}`;
+                        })()
+                      : formatINR(prop.price)
+                    }
                   </span>
                 </div>
 
@@ -528,39 +716,77 @@ export default function InventoryPage() {
                   {prop.propertyName}
                 </h3>
                 
-                <div className="text-[10px] text-[var(--muted)] space-y-1 mt-2.5">
-                  <div className="flex items-center gap-1">
-                    <MapPin className="h-3.5 w-3.5 text-blue-500" /> {prop.location} ({prop.road})
+                {prop.propertyType === 'Township' ? (
+                  <div className="text-[10px] text-[var(--muted)] space-y-1 mt-2.5">
+                    <div className="flex items-center gap-1">
+                      <MapPin className="h-3.5 w-3.5 text-blue-500" /> {prop.location}
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Compass className="h-3.5 w-3.5 text-amber-500" /> Land Area: {prop.totalLandArea || 'N/A'} | {prop.plots?.length || 0} Plots
+                    </div>
+                    <div className="flex items-center gap-1 text-[10px] text-[var(--muted)] mt-1.5">
+                      <LandPlot className="h-3.5 w-3.5 text-green-500" /> Category: {prop.propertyCategory || 'Mixed'}
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1">
-                    <Compass className="h-3.5 w-3.5 text-amber-500" /> {prop.facing} Facing | {prop.squareYard} Sq Yards
-                  </div>
-                </div>
+                ) : (
+                  <>
+                    <div className="text-[10px] text-[var(--muted)] space-y-1 mt-2.5">
+                      <div className="flex items-center gap-1">
+                        <MapPin className="h-3.5 w-3.5 text-blue-500" /> {prop.location} ({prop.road})
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Compass className="h-3.5 w-3.5 text-amber-500" /> {prop.facing} Facing | {prop.squareYard} Sq Yards
+                      </div>
+                    </div>
 
-                <div className="flex items-center gap-1 text-[10px] text-[var(--muted)] mt-1.5">
-                  <LandPlot className="h-3.5 w-3.5 text-green-500" /> {prop.propertyCategory || 'Plot'} | {prop.dimensions || 'Dimensions pending'} | {formatINR(prop.pricePerSquareYard || 0)} / sq.yd
-                </div>
+                    <div className="flex items-center gap-1 text-[10px] text-[var(--muted)] mt-1.5">
+                      <LandPlot className="h-3.5 w-3.5 text-green-500" /> {prop.propertyCategory || 'Plot'} | {prop.dimensions || 'Dimensions pending'} | {formatINR(prop.pricePerSquareYard || 0)} / sq.yd
+                    </div>
+                  </>
+                )}
 
                 {/* Approvals */}
                 <div className="flex gap-2 mt-3 pt-2 border-t border-[var(--border)]">
-                  {prop.jdaApproved && (
-                    <span className="text-[9px] font-semibold text-emerald-500 bg-emerald-500/10 px-1.5 py-0.2 rounded border border-emerald-500/20 flex items-center gap-0.5">
-                      <CheckCircle className="h-2.5 w-2.5" /> JDA Approved
-                    </span>
+                  {prop.propertyType === 'Township' ? (
+                    <>
+                      {(prop.authorities || []).map((auth: string) => (
+                        <span key={auth} className="text-[9px] font-semibold text-emerald-500 bg-emerald-500/10 px-1.5 py-0.2 rounded border border-emerald-500/20">
+                          {auth}
+                        </span>
+                      ))}
+                      {(!prop.authorities || prop.authorities.length === 0) && (
+                        <>
+                          {prop.jdaApproved && <span className="text-[9px] font-semibold text-emerald-500 bg-emerald-500/10 px-1.5 py-0.2 rounded border border-emerald-500/20">JDA Approved</span>}
+                          {prop.rera && <span className="text-[9px] font-semibold text-emerald-500 bg-emerald-500/10 px-1.5 py-0.2 rounded border border-emerald-500/20">RERA</span>}
+                          {prop.societyApproved && <span className="text-[9px] font-semibold text-emerald-500 bg-emerald-500/10 px-1.5 py-0.2 rounded border border-emerald-500/20">Society</span>}
+                        </>
+                      )}
+                      <span className="text-[9px] text-[var(--muted)] ml-auto bg-[var(--background)] px-1.5 py-0.2 rounded">
+                        {prop.plots?.filter((p: any) => p.status === 'Available').length || 0} / {prop.plots?.length || 0} Avail
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      {prop.jdaApproved && (
+                        <span className="text-[9px] font-semibold text-emerald-500 bg-emerald-500/10 px-1.5 py-0.2 rounded border border-emerald-500/20 flex items-center gap-0.5">
+                          <CheckCircle className="h-2.5 w-2.5" /> JDA Approved
+                        </span>
+                      )}
+                      {prop.rera && (
+                        <span className="text-[9px] font-semibold text-emerald-500 bg-emerald-500/10 px-1.5 py-0.2 rounded border border-emerald-500/20">
+                          RERA
+                        </span>
+                      )}
+                      {prop.societyApproved && (
+                        <span className="text-[9px] font-semibold text-emerald-500 bg-emerald-500/10 px-1.5 py-0.2 rounded border border-emerald-500/20">
+                          Society
+                        </span>
+                      )}
+                      <span className="text-[9px] text-[var(--muted)] ml-auto bg-[var(--background)] px-1.5 py-0.2 rounded">
+                        {prop.amenities?.length || 0} Amenities
+                      </span>
+                    </>
                   )}
-                  {prop.rera && (
-                    <span className="text-[9px] font-semibold text-emerald-500 bg-emerald-500/10 px-1.5 py-0.2 rounded border border-emerald-500/20">
-                      RERA
-                    </span>
-                  )}
-                  {prop.societyApproved && (
-                    <span className="text-[9px] font-semibold text-emerald-500 bg-emerald-500/10 px-1.5 py-0.2 rounded border border-emerald-500/20">
-                      Society
-                    </span>
-                  )}
-                  <span className="text-[9px] text-[var(--muted)] ml-auto bg-[var(--background)] px-1.5 py-0.2 rounded">
-                    {prop.amenities?.length || 0} Amenities
-                  </span>
                 </div>
               </div>
             ))
@@ -570,7 +796,7 @@ export default function InventoryPage() {
         {/* Selected Property Detail Sidebar Drawer */}
         {selectedProperty && (
           <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm lg:static lg:col-span-4 lg:block lg:bg-transparent lg:p-0 lg:backdrop-blur-none">
-          <div role="dialog" aria-modal="true" aria-label="Property listing details" className="w-full max-w-md max-h-[90vh] overflow-y-auto p-4 bg-[var(--card)] border border-[var(--border)] rounded-xl space-y-4 shadow-2xl animate-in fade-in zoom-in-95 duration-200 lg:max-w-none lg:shadow-sm lg:slide-in-from-right-4">
+          <div role="dialog" aria-modal="true" aria-label="Property listing details" className={`w-full ${selectedProperty.propertyType === 'Township' ? 'max-w-3xl' : 'max-w-md'} max-h-[90vh] overflow-y-auto p-4 bg-[var(--card)] border border-[var(--border)] rounded-xl space-y-4 shadow-2xl animate-in fade-in zoom-in-95 duration-200 lg:max-w-none lg:shadow-sm lg:slide-in-from-right-4`}>
             <div className="flex justify-between items-center pb-2 border-b border-[var(--border)]">
               <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--muted)]">Listing Details</h3>
               <button 
@@ -585,10 +811,17 @@ export default function InventoryPage() {
               <div>
                 <h4 className="text-sm font-bold">{selectedProperty.propertyName}</h4>
                 <p className="text-[11px] text-[var(--muted)] flex items-center gap-0.5 mt-0.5">
-                  <MapPin className="h-3 w-3" /> {selectedProperty.location} ({selectedProperty.road})
+                  <MapPin className="h-3 w-3" /> {selectedProperty.location} {selectedProperty.propertyType !== 'Township' && `(${selectedProperty.road})`}
                 </p>
                 <p className="text-[10px] text-[var(--muted)] mt-1">
-                  {selectedProperty.propertyCategory || 'Plot'} | {formatINR(selectedProperty.pricePerSquareYard || 0)}/sqyd | {selectedProperty.dimensions || 'Dimensions pending'}
+                  {selectedProperty.propertyType === 'Township' ? (
+                    <>Township / Project | Category: {selectedProperty.propertyCategory || 'Mixed'} | Land Area: {selectedProperty.totalLandArea || 'N/A'}</>
+                  ) : (
+                    <>{selectedProperty.propertyCategory || 'Plot'} | {formatINR(selectedProperty.pricePerSquareYard || 0)}/sqyd | {selectedProperty.dimensions || 'Dimensions pending'}</>
+                  )}
+                </p>
+                <p className="text-[10px] text-[var(--muted)] mt-0.5">
+                  <strong>Authority:</strong> {selectedProperty.authorities?.length ? selectedProperty.authorities.join(' + ') : [selectedProperty.jdaApproved && 'JDA', selectedProperty.rera && 'RERA', selectedProperty.societyApproved && 'Society'].filter(Boolean).join(' + ') || 'N/A'}
                 </p>
               </div>
 
@@ -607,6 +840,301 @@ export default function InventoryPage() {
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>
               </div>
+
+              {/* Township Inventory Dashboard */}
+              {selectedProperty.propertyType === 'Township' && (() => {
+                const plots = selectedProperty.plots || [];
+                const total = plots.length;
+                const available = plots.filter((p: any) => p.status === 'Available').length;
+                const hold = plots.filter((p: any) => p.status === 'Hold').length;
+                const sold = plots.filter((p: any) => p.status === 'Sold').length;
+                const pending = plots.filter((p: any) => p.status === 'Pending').length;
+
+                const filteredPlots = plots.filter((p: any) => {
+                  const matchSearch = plotSearchQuery ? p.plotNumber.toLowerCase().includes(plotSearchQuery.toLowerCase()) : true;
+                  const matchType = plotFilterType ? p.propertyType === plotFilterType : true;
+                  const matchStatus = plotFilterStatus ? p.status === plotFilterStatus : true;
+                  return matchSearch && matchType && matchStatus;
+                });
+
+                return (
+                  <div className="space-y-3 pt-2 border-t">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--muted)] block">Township Plot Dashboard</span>
+                    
+                    <div className="grid grid-cols-5 gap-1.5 p-2.5 bg-[var(--background)] border border-[var(--border)] rounded-xl text-center">
+                      <div>
+                        <p className="text-[8px] font-bold text-[var(--muted)] uppercase">Total</p>
+                        <p className="text-xs font-bold mt-0.5">{total}</p>
+                      </div>
+                      <div>
+                        <p className="text-[8px] font-bold text-green-500 uppercase">Available</p>
+                        <p className="text-xs font-bold text-green-500 mt-0.5">{available}</p>
+                      </div>
+                      <div>
+                        <p className="text-[8px] font-bold text-amber-500 uppercase">Hold</p>
+                        <p className="text-xs font-bold text-amber-500 mt-0.5">{hold}</p>
+                      </div>
+                      <div>
+                        <p className="text-[8px] font-bold text-red-500 uppercase">Sold</p>
+                        <p className="text-xs font-bold text-red-500 mt-0.5">{sold}</p>
+                      </div>
+                      <div>
+                        <p className="text-[8px] font-bold text-blue-500 uppercase">Pending</p>
+                        <p className="text-xs font-bold text-blue-500 mt-0.5">{pending}</p>
+                      </div>
+                    </div>
+
+                    {/* Plots Section Title & Add Trigger */}
+                    <div className="flex justify-between items-center mt-4">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--muted)]">Plots & Shops Inventory ({filteredPlots.length})</span>
+                      <button
+                        onClick={() => {
+                          setEditingPlotId(null);
+                          setPlotFormNumber('');
+                          setPlotFormSize('');
+                          setPlotFormPrice(0);
+                          setPlotFormRemarks('');
+                          setShowPlotForm(!showPlotForm);
+                        }}
+                        className="px-2 py-0.5 bg-blue-600 hover:bg-blue-500 text-white rounded text-[9px] font-semibold flex items-center gap-1 cursor-pointer"
+                      >
+                        <Plus className="h-2.5 w-2.5" /> {showPlotForm && !editingPlotId ? 'Cancel' : 'Add Plot'}
+                      </button>
+                    </div>
+
+                    {/* Plot Add/Edit Inline Form */}
+                    {showPlotForm && (
+                      <div className="p-3 bg-[var(--background)] border border-[var(--border)] rounded-xl space-y-3">
+                        <p className="text-[10px] font-bold text-blue-500">{editingPlotId ? 'Edit Plot Specs' : 'Add New Plot to Township'}</p>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="space-y-0.5">
+                            <label className="text-[8px] font-bold text-[var(--muted)] uppercase">Plot Number</label>
+                            <input
+                              type="text"
+                              value={plotFormNumber}
+                              onChange={(e) => setPlotFormNumber(e.target.value)}
+                              placeholder="e.g. 01"
+                              className="w-full p-1.5 border rounded-lg text-[10px] bg-[var(--card)] border-[var(--border)] focus:outline-none"
+                            />
+                          </div>
+
+                          <div className="space-y-0.5">
+                            <label className="text-[8px] font-bold text-[var(--muted)] uppercase">Property Type</label>
+                            <select
+                              value={plotFormType}
+                              onChange={(e) => setPlotFormType(e.target.value as any)}
+                              className="w-full p-1.5 border rounded-lg text-[10px] bg-[var(--card)] border-[var(--border)] focus:outline-none"
+                            >
+                              <option value="Residential">Residential</option>
+                              <option value="Commercial">Commercial</option>
+                            </select>
+                          </div>
+
+                          <div className="space-y-0.5">
+                            <label className="text-[8px] font-bold text-[var(--muted)] uppercase">Size (Gaj / Sqyd)</label>
+                            <input
+                              type="text"
+                              value={plotFormSize}
+                              onChange={(e) => setPlotFormSize(e.target.value)}
+                              placeholder="e.g. 120 Gaj"
+                              className="w-full p-1.5 border rounded-lg text-[10px] bg-[var(--card)] border-[var(--border)] focus:outline-none"
+                            />
+                          </div>
+
+                          <div className="space-y-0.5">
+                            <label className="text-[8px] font-bold text-[var(--muted)] uppercase">Facing</label>
+                            <select
+                              value={plotFormFacing}
+                              onChange={(e) => setPlotFormFacing(e.target.value as any)}
+                              className="w-full p-1.5 border rounded-lg text-[10px] bg-[var(--card)] border-[var(--border)] focus:outline-none"
+                            >
+                              <option value="North">North</option>
+                              <option value="East">East</option>
+                              <option value="South">South</option>
+                              <option value="West">West</option>
+                            </select>
+                          </div>
+
+                          <div className="space-y-0.5">
+                            <label className="text-[8px] font-bold text-[var(--muted)] uppercase">Road Width</label>
+                            <select
+                              value={plotFormRoadWidth}
+                              onChange={(e) => setPlotFormRoadWidth(e.target.value as any)}
+                              className="w-full p-1.5 border rounded-lg text-[10px] bg-[var(--card)] border-[var(--border)] focus:outline-none"
+                            >
+                              <option value="25 ft">25 ft</option>
+                              <option value="30 ft">30 ft</option>
+                              <option value="40 ft">40 ft</option>
+                              <option value="60 ft">60 ft</option>
+                              <option value="100 ft">100 ft</option>
+                              <option value="150 ft">150 ft</option>
+                            </select>
+                          </div>
+
+                          <div className="space-y-0.5">
+                            <label className="text-[8px] font-bold text-[var(--muted)] uppercase">Price (₹ Amount)</label>
+                            <input
+                              type="number"
+                              value={plotFormPrice || ''}
+                              onChange={(e) => setPlotFormPrice(Number(e.target.value))}
+                              placeholder="e.g. 2500000"
+                              className="w-full p-1.5 border rounded-lg text-[10px] bg-[var(--card)] border-[var(--border)] focus:outline-none"
+                            />
+                          </div>
+
+                          <div className="space-y-0.5">
+                            <label className="text-[8px] font-bold text-[var(--muted)] uppercase">Status</label>
+                            <select
+                              value={plotFormStatus}
+                              onChange={(e) => setPlotFormStatus(e.target.value as any)}
+                              className="w-full p-1.5 border rounded-lg text-[10px] bg-[var(--card)] border-[var(--border)] focus:outline-none"
+                            >
+                              <option value="Available">Available</option>
+                              <option value="Hold">Hold</option>
+                              <option value="Sold">Sold</option>
+                              <option value="Pending">Pending</option>
+                            </select>
+                          </div>
+
+                          <div className="space-y-0.5">
+                            <label className="text-[8px] font-bold text-[var(--muted)] uppercase">Remarks</label>
+                            <input
+                              type="text"
+                              value={plotFormRemarks}
+                              onChange={(e) => setPlotFormRemarks(e.target.value)}
+                              placeholder="e.g. Corner plot"
+                              className="w-full p-1.5 border rounded-lg text-[10px] bg-[var(--card)] border-[var(--border)] focus:outline-none"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="flex justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowPlotForm(false);
+                              setEditingPlotId(null);
+                            }}
+                            className="px-2.5 py-1 border border-[var(--border)] rounded text-[9px] font-semibold hover:bg-[var(--secondary)] cursor-pointer"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleSavePlot}
+                            className="px-2.5 py-1 bg-blue-600 text-white rounded text-[9px] font-semibold hover:bg-blue-500 cursor-pointer"
+                          >
+                            Save Plot
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Plots Search & Filters */}
+                    <div className="flex gap-2 items-center flex-wrap">
+                      <div className="relative flex-1 min-w-[120px]">
+                        <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-[var(--muted)]" />
+                        <input
+                          type="text"
+                          placeholder="Search Plot No..."
+                          value={plotSearchQuery}
+                          onChange={(e) => setPlotSearchQuery(e.target.value)}
+                          className="w-full pl-7 pr-2 py-1.5 border rounded-lg text-[10px] bg-[var(--background)] border-[var(--border)] focus:outline-none"
+                        />
+                      </div>
+                      <select
+                        value={plotFilterType}
+                        onChange={(e) => setPlotFilterType(e.target.value)}
+                        className="p-1.5 border rounded-lg text-[10px] bg-[var(--background)] border-[var(--border)] focus:outline-none cursor-pointer"
+                      >
+                        <option value="">All Types</option>
+                        <option value="Residential">Residential</option>
+                        <option value="Commercial">Commercial</option>
+                      </select>
+                      <select
+                        value={plotFilterStatus}
+                        onChange={(e) => setPlotFilterStatus(e.target.value)}
+                        className="p-1.5 border rounded-lg text-[10px] bg-[var(--background)] border-[var(--border)] focus:outline-none cursor-pointer"
+                      >
+                        <option value="">All Statuses</option>
+                        <option value="Available">Available</option>
+                        <option value="Hold">Hold</option>
+                        <option value="Sold">Sold</option>
+                        <option value="Pending">Pending</option>
+                      </select>
+                    </div>
+
+                    {/* Plots Inventory Table */}
+                    <div className="overflow-x-auto border border-[var(--border)] rounded-xl bg-[var(--background)] max-h-[350px] overflow-y-auto">
+                      <table className="w-full text-left border-collapse text-[10px]">
+                        <thead>
+                          <tr className="border-b bg-[var(--secondary)] font-bold text-[var(--muted)] sticky top-0">
+                            <th className="p-2">Plot No.</th>
+                            <th className="p-2">Type</th>
+                            <th className="p-2">Size</th>
+                            <th className="p-2">Facing</th>
+                            <th className="p-2">Road</th>
+                            <th className="p-2">Price</th>
+                            <th className="p-2">Status</th>
+                            <th className="p-2 text-right">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filteredPlots.length === 0 ? (
+                            <tr>
+                              <td colSpan={8} className="p-4 text-center text-[var(--muted)] italic">No plots registered inside this township</td>
+                            </tr>
+                          ) : (
+                            filteredPlots.map((plot: any) => (
+                              <tr key={plot._id || plot.plotNumber} className="border-b hover:bg-[var(--secondary)]/40 transition-colors">
+                                <td className="p-2 font-bold">{plot.plotNumber}</td>
+                                <td className="p-2 text-[9px]">{plot.propertyType}</td>
+                                <td className="p-2">{plot.size}</td>
+                                <td className="p-2">{plot.facing}</td>
+                                <td className="p-2">{plot.roadWidth}</td>
+                                <td className="p-2 font-bold text-blue-500">{formatINR(plot.price)}</td>
+                                <td className="p-2">
+                                  <select
+                                    value={plot.status}
+                                    onChange={(e) => handleUpdatePlotStatus(plot._id, plot.plotNumber, e.target.value)}
+                                    className={`p-0.5 rounded text-[9px] font-bold ${
+                                      plot.status === 'Available' ? 'bg-green-500/10 text-green-500' :
+                                      plot.status === 'Hold' ? 'bg-amber-500/10 text-amber-500' :
+                                      plot.status === 'Sold' ? 'bg-red-500/10 text-red-500' :
+                                      'bg-blue-500/10 text-blue-500'
+                                    } border-none focus:outline-none cursor-pointer`}
+                                  >
+                                    <option value="Available">Available</option>
+                                    <option value="Hold">Hold</option>
+                                    <option value="Sold">Sold</option>
+                                    <option value="Pending">Pending</option>
+                                  </select>
+                                </td>
+                                <td className="p-2 text-right space-x-1">
+                                  <button
+                                    onClick={() => handleTriggerEditPlot(plot)}
+                                    className="p-1 hover:text-blue-500 inline-block cursor-pointer"
+                                    title="Edit Plot"
+                                  >
+                                    <Edit3 className="h-3 w-3" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeletePlot(plot._id, plot.plotNumber)}
+                                    className="p-1 hover:text-red-500 inline-block cursor-pointer"
+                                    title="Delete Plot"
+                                  >
+                                    <Trash2 className="h-3 w-3" />
+                                  </button>
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {getPropertyMedia(selectedProperty).length > 0 && (() => {
                 const media = getPropertyMedia(selectedProperty);
@@ -777,176 +1305,304 @@ export default function InventoryPage() {
             <form onSubmit={handleSubmit(onSubmit)} className="flex-1 overflow-y-auto p-6 space-y-4">
               
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {/* Property Name */}
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-[var(--muted)] uppercase">Property Name</label>
-                  <input
-                    {...register('propertyName')}
-                    type="text"
-                    placeholder="Apex Greens Phase II"
-                    className="w-full p-2 border rounded-xl text-xs bg-[var(--background)] border-[var(--border)] focus:outline-none"
-                  />
-                  {errors.propertyName && <p className="text-red-400 text-[10px]">{errors.propertyName.message}</p>}
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-[var(--muted)] uppercase">Developer / Builder</label>
-                  <input
-                    {...register('developerName')}
-                    type="text"
-                    placeholder="Apex Developers"
-                    className="w-full p-2 border rounded-xl text-xs bg-[var(--background)] border-[var(--border)] focus:outline-none"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-[var(--muted)] uppercase">Property Category</label>
+                
+                {/* Property Type Selection */}
+                <div className="space-y-1 sm:col-span-2">
+                  <label className="text-xs font-semibold text-[var(--muted)] uppercase">Listing Type</label>
                   <select
-                    {...register('propertyCategory')}
-                    className="w-full p-2 border rounded-xl text-xs bg-[var(--background)] border-[var(--border)] focus:outline-none"
+                    {...register('propertyType')}
+                    className="w-full p-2 border rounded-xl text-xs bg-[var(--background)] border-[var(--border)] focus:outline-none cursor-pointer"
                   >
-                    {PROPERTY_CATEGORY_OPTIONS.map((category) => (
-                      <option key={category} value={category}>{category}</option>
-                    ))}
+                    <option value="Individual">Individual Property</option>
+                    <option value="Township">Township / Project</option>
                   </select>
                 </div>
 
-                {/* Location */}
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-[var(--muted)] uppercase">Location</label>
-                  <input
-                    {...register('location')}
-                    type="text"
-                    placeholder="Sector 3, Tonk Road"
-                    className="w-full p-2 border rounded-xl text-xs bg-[var(--background)] border-[var(--border)] focus:outline-none"
-                  />
-                  {errors.location && <p className="text-red-400 text-[10px]">{errors.location.message}</p>}
-                </div>
+                {formPropertyType === 'Township' ? (
+                  // Township fields
+                  <>
+                    <div className="space-y-1">
+                      <label className="text-xs font-semibold text-[var(--muted)] uppercase">Township / Project Name</label>
+                      <input
+                        {...register('propertyName')}
+                        type="text"
+                        placeholder="e.g. Apex Greens Phase II"
+                        className="w-full p-2 border rounded-xl text-xs bg-[var(--background)] border-[var(--border)] focus:outline-none"
+                      />
+                      {errors.propertyName && <p className="text-red-400 text-[10px]">{errors.propertyName.message}</p>}
+                    </div>
 
-                {/* Road */}
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-[var(--muted)] uppercase">Road / Highway</label>
-                  <select
-                    {...register('road')}
-                    className="w-full p-2 border rounded-xl text-xs bg-[var(--background)] border-[var(--border)] focus:outline-none"
-                  >
-                    {ROAD_OPTIONS.map((road) => (
-                      <option key={road} value={road}>{road}</option>
-                    ))}
-                  </select>
-                </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-semibold text-[var(--muted)] uppercase">Developer / Builder</label>
+                      <input
+                        {...register('developerName')}
+                        type="text"
+                        placeholder="Apex Developers"
+                        className="w-full p-2 border rounded-xl text-xs bg-[var(--background)] border-[var(--border)] focus:outline-none"
+                      />
+                    </div>
 
-                {/* Square Yard */}
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-[var(--muted)] uppercase">Square Yards</label>
-                  <input
-                    {...register('squareYard', { valueAsNumber: true })}
-                    type="number"
-                    className="w-full p-2 border rounded-xl text-xs bg-[var(--background)] border-[var(--border)] focus:outline-none"
-                  />
-                  {errors.squareYard && <p className="text-red-400 text-[10px]">{errors.squareYard.message}</p>}
-                </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-semibold text-[var(--muted)] uppercase">Property Category</label>
+                      <select
+                        {...register('propertyCategory')}
+                        className="w-full p-2 border rounded-xl text-xs bg-[var(--background)] border-[var(--border)] focus:outline-none cursor-pointer"
+                      >
+                        <option value="Residential">Residential</option>
+                        <option value="Commercial">Commercial</option>
+                        <option value="Mixed">Mixed</option>
+                      </select>
+                    </div>
 
-                {/* Facing */}
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-[var(--muted)] uppercase">Facing Direction</label>
-                  <input
-                    {...register('facing')}
-                    type="text"
-                    placeholder="East, West, Corner, etc."
-                    className="w-full p-2 border rounded-xl text-xs bg-[var(--background)] border-[var(--border)] focus:outline-none"
-                  />
-                  {errors.facing && <p className="text-red-400 text-[10px]">{errors.facing.message}</p>}
-                </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-semibold text-[var(--muted)] uppercase">Total Land Area</label>
+                      <input
+                        {...register('totalLandArea')}
+                        type="text"
+                        placeholder="e.g. 30 Bigha"
+                        className="w-full p-2 border rounded-xl text-xs bg-[var(--background)] border-[var(--border)] focus:outline-none"
+                      />
+                    </div>
 
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-[var(--muted)] uppercase">Dimensions</label>
-                  <input
-                    {...register('dimensions')}
-                    type="text"
-                    placeholder="30 x 45"
-                    className="w-full p-2 border rounded-xl text-xs bg-[var(--background)] border-[var(--border)] focus:outline-none"
-                  />
-                </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-semibold text-[var(--muted)] uppercase">Location</label>
+                      <input
+                        {...register('location')}
+                        type="text"
+                        placeholder="Sector 3, Tonk Road"
+                        className="w-full p-2 border rounded-xl text-xs bg-[var(--background)] border-[var(--border)] focus:outline-none"
+                      />
+                      {errors.location && <p className="text-red-400 text-[10px]">{errors.location.message}</p>}
+                    </div>
 
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-[var(--muted)] uppercase">Price Per Sq Yard</label>
-                  <input
-                    {...register('pricePerSquareYard', { valueAsNumber: true })}
-                    type="number"
-                    className="w-full p-2 border rounded-xl text-xs bg-[var(--background)] border-[var(--border)] focus:outline-none"
-                  />
-                </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-semibold text-[var(--muted)] uppercase">Total Number of Plots</label>
+                      <input
+                        {...register('totalPlots', { valueAsNumber: true })}
+                        type="number"
+                        placeholder="150"
+                        className="w-full p-2 border rounded-xl text-xs bg-[var(--background)] border-[var(--border)] focus:outline-none"
+                      />
+                    </div>
 
-                {/* Price */}
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-[var(--muted)] uppercase">Total Demand Amount</label>
-                  <input
-                    {...register('price', { valueAsNumber: true })}
-                    type="number"
-                    className="w-full p-2 border rounded-xl text-xs bg-[var(--background)] border-[var(--border)] focus:outline-none"
-                  />
-                  {errors.price && <p className="text-red-400 text-[10px]">{errors.price.message}</p>}
-                </div>
+                    <div className="space-y-1 sm:col-span-2">
+                      <label className="text-xs font-semibold text-[var(--muted)] uppercase">Plot / Shop Configuration</label>
+                      <input
+                        {...register('plotConfig')}
+                        type="text"
+                        placeholder="e.g. 100 Plots, 50 Shops"
+                        className="w-full p-2 border rounded-xl text-xs bg-[var(--background)] border-[var(--border)] focus:outline-none"
+                      />
+                    </div>
 
-                {/* Status */}
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-[var(--muted)] uppercase">Status</label>
-                  <select
-                    {...register('status')}
-                    className="w-full p-2 border rounded-xl text-xs bg-[var(--background)] border-[var(--border)] focus:outline-none"
-                  >
-                    <option value="Available">Available</option>
-                    <option value="Booked">Booked</option>
-                    <option value="Sold">Sold</option>
-                  </select>
-                </div>
+                    <div className="space-y-1 sm:col-span-2">
+                      <label className="text-xs font-semibold text-[var(--muted)] uppercase">Google Map Link</label>
+                      <input
+                        {...register('googleMapLink')}
+                        type="text"
+                        placeholder="https://maps.google.com/..."
+                        className="w-full p-2 border rounded-xl text-xs bg-[var(--background)] border-[var(--border)] focus:outline-none"
+                      />
+                    </div>
+                  </>
+                ) : (
+                  // Individual fields
+                  <>
+                    <div className="space-y-1">
+                      <label className="text-xs font-semibold text-[var(--muted)] uppercase">Property Name</label>
+                      <input
+                        {...register('propertyName')}
+                        type="text"
+                        placeholder="Apex Greens Phase II"
+                        className="w-full p-2 border rounded-xl text-xs bg-[var(--background)] border-[var(--border)] focus:outline-none"
+                      />
+                      {errors.propertyName && <p className="text-red-400 text-[10px]">{errors.propertyName.message}</p>}
+                    </div>
 
-                {/* Map Link */}
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-[var(--muted)] uppercase">Google Map Link</label>
-                  <input
-                    {...register('googleMapLink')}
-                    type="text"
-                    placeholder="https://maps.google.com/..."
-                    className="w-full p-2 border rounded-xl text-xs bg-[var(--background)] border-[var(--border)] focus:outline-none"
-                  />
+                    <div className="space-y-1">
+                      <label className="text-xs font-semibold text-[var(--muted)] uppercase">Developer / Builder</label>
+                      <input
+                        {...register('developerName')}
+                        type="text"
+                        placeholder="Apex Developers"
+                        className="w-full p-2 border rounded-xl text-xs bg-[var(--background)] border-[var(--border)] focus:outline-none"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-xs font-semibold text-[var(--muted)] uppercase">Property Category</label>
+                      <select
+                        {...register('propertyCategory')}
+                        className="w-full p-2 border rounded-xl text-xs bg-[var(--background)] border-[var(--border)] focus:outline-none cursor-pointer"
+                      >
+                        {PROPERTY_CATEGORY_OPTIONS.map((category) => (
+                          <option key={category} value={category}>{category}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-xs font-semibold text-[var(--muted)] uppercase">Location</label>
+                      <input
+                        {...register('location')}
+                        type="text"
+                        placeholder="Sector 3, Tonk Road"
+                        className="w-full p-2 border rounded-xl text-xs bg-[var(--background)] border-[var(--border)] focus:outline-none"
+                      />
+                      {errors.location && <p className="text-red-400 text-[10px]">{errors.location.message}</p>}
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-xs font-semibold text-[var(--muted)] uppercase">Road / Highway</label>
+                      <select
+                        {...register('road')}
+                        className="w-full p-2 border rounded-xl text-xs bg-[var(--background)] border-[var(--border)] focus:outline-none cursor-pointer"
+                      >
+                        {ROAD_OPTIONS.map((road) => (
+                          <option key={road} value={road}>{road}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-xs font-semibold text-[var(--muted)] uppercase">Square Yards</label>
+                      <input
+                        {...register('squareYard', { valueAsNumber: true })}
+                        type="number"
+                        className="w-full p-2 border rounded-xl text-xs bg-[var(--background)] border-[var(--border)] focus:outline-none"
+                      />
+                      {errors.squareYard && <p className="text-red-400 text-[10px]">{errors.squareYard.message}</p>}
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-xs font-semibold text-[var(--muted)] uppercase">Facing Direction</label>
+                      <input
+                        {...register('facing')}
+                        type="text"
+                        placeholder="East, West, Corner, etc."
+                        className="w-full p-2 border rounded-xl text-xs bg-[var(--background)] border-[var(--border)] focus:outline-none"
+                      />
+                      {errors.facing && <p className="text-red-400 text-[10px]">{errors.facing.message}</p>}
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-xs font-semibold text-[var(--muted)] uppercase">Dimensions</label>
+                      <input
+                        {...register('dimensions')}
+                        type="text"
+                        placeholder="30 x 45"
+                        className="w-full p-2 border rounded-xl text-xs bg-[var(--background)] border-[var(--border)] focus:outline-none"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-xs font-semibold text-[var(--muted)] uppercase">Price Per Sq Yard</label>
+                      <input
+                        {...register('pricePerSquareYard', { valueAsNumber: true })}
+                        type="number"
+                        className="w-full p-2 border rounded-xl text-xs bg-[var(--background)] border-[var(--border)] focus:outline-none"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-xs font-semibold text-[var(--muted)] uppercase">Total Demand Amount</label>
+                      <input
+                        {...register('price', { valueAsNumber: true })}
+                        type="number"
+                        className="w-full p-2 border rounded-xl text-xs bg-[var(--background)] border-[var(--border)] focus:outline-none"
+                      />
+                      {errors.price && <p className="text-red-400 text-[10px]">{errors.price.message}</p>}
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-xs font-semibold text-[var(--muted)] uppercase">Status</label>
+                      <select
+                        {...register('status')}
+                        className="w-full p-2 border rounded-xl text-xs bg-[var(--background)] border-[var(--border)] focus:outline-none cursor-pointer"
+                      >
+                        <option value="Available">Available</option>
+                        <option value="Booked">Booked</option>
+                        <option value="Sold">Sold</option>
+                      </select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-xs font-semibold text-[var(--muted)] uppercase">Google Map Link</label>
+                      <input
+                        {...register('googleMapLink')}
+                        type="text"
+                        placeholder="https://maps.google.com/..."
+                        className="w-full p-2 border rounded-xl text-xs bg-[var(--background)] border-[var(--border)] focus:outline-none"
+                      />
+                    </div>
+                  </>
+                )}
+
+              </div>
+
+              {/* Local Authority / Approval Details multi-selection */}
+              <div className="space-y-1.5 p-3 bg-[var(--background)] border border-[var(--border)] rounded-xl">
+                <label className="text-xs font-semibold text-[var(--muted)] uppercase block">Local Authority / Approval</label>
+                <div className="flex gap-4 flex-wrap">
+                  {['JDA', 'RERA', 'Registered Society', 'Nagar Palika', 'Other'].map((auth) => (
+                    <label key={auth} className="flex items-center gap-2 text-xs font-semibold cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formAuthorities.includes(auth)}
+                        onChange={() => toggleAuthority(auth)}
+                        className="rounded border-[var(--border)] text-blue-600 focus:ring-blue-500"
+                      />
+                      {auth}
+                    </label>
+                  ))}
                 </div>
               </div>
 
-              {/* Approvals */}
-              <div className="flex gap-4 p-3 bg-[var(--background)] border rounded-xl">
-                <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer">
-                  <input
-                    type="checkbox"
-                    {...register('jdaApproved')}
-                    className="rounded border-[var(--border)] text-blue-600 focus:ring-blue-500"
-                  />
-                  JDA Approved
-                </label>
+              {/* Standard Amenities Selection for Township */}
+              {formPropertyType === 'Township' && (
+                <div className="space-y-1.5 p-3 bg-[var(--background)] border border-[var(--border)] rounded-xl">
+                  <label className="text-xs font-semibold text-[var(--muted)] uppercase block">Standard Amenities</label>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {[
+                      'Club House',
+                      'Swimming Pool',
+                      'Temple',
+                      'Park',
+                      'Kids Play Area',
+                      'Gym',
+                      'Community Hall',
+                      'Security',
+                      'CCTV',
+                      'Commercial Area',
+                      'Parking',
+                      'Internal Roads'
+                    ].map((amenity) => {
+                      const isSelected = formAmenities.includes(amenity);
+                      return (
+                        <label key={amenity} className="flex items-center gap-2 text-xs cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => {
+                              if (isSelected) {
+                                setValue('amenities', formAmenities.filter(a => a !== amenity), { shouldDirty: true });
+                              } else {
+                                setValue('amenities', [...formAmenities, amenity], { shouldDirty: true });
+                              }
+                            }}
+                            className="rounded border-[var(--border)] text-blue-600 focus:ring-blue-500"
+                          />
+                          {amenity}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
-                <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer">
-                  <input
-                    type="checkbox"
-                    {...register('rera')}
-                    className="rounded border-[var(--border)] text-blue-600 focus:ring-blue-500"
-                  />
-                  RERA Registered
-                </label>
-
-                <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer">
-                  <input
-                    type="checkbox"
-                    {...register('societyApproved')}
-                    className="rounded border-[var(--border)] text-blue-600 focus:ring-blue-500"
-                  />
-                  Society Approved
-                </label>
-              </div>
-
-              {/* Amenities Inputs */}
+              {/* Add Custom / Other Amenities */}
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-[var(--muted)] uppercase block">Amenities</label>
+                <label className="text-xs font-semibold text-[var(--muted)] uppercase block">Add Custom Amenities</label>
                 <div className="flex gap-2 mb-2">
                   <input
                     type="text"

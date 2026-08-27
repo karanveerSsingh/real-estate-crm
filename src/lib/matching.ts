@@ -86,7 +86,7 @@ function requirementFeaturesMatch(requirement: string | undefined, property: Pro
   return checks.length > 0 || !/(jda|rera|society|facing|east|west|north|south)/.test(text);
 }
 
-export function scorePropertyForCustomer(customer: CustomerLike, property: PropertyLike, tolerance = true): MatchResult<PropertyLike> {
+function scoreIndividualPropertyForCustomer(customer: CustomerLike, property: PropertyLike, tolerance = true): MatchResult<PropertyLike> {
   const requiredCategory = requestedPropertyCategory(customer.purpose);
   const hasLocationMatch = locationMatches(customer.preferredLocations, property);
   const hasBudgetMatch = budgetMatchesPrice(customer.budget, property.price, tolerance);
@@ -137,19 +137,79 @@ export function scorePropertyForCustomer(customer: CustomerLike, property: Prope
   return { ...property, matchScore: Math.min(score, 100), matchReasons: Array.from(new Set(reasons)) };
 }
 
+export function scorePropertyForCustomer(customer: CustomerLike, property: PropertyLike, tolerance = true): MatchResult<PropertyLike> {
+  if (property.propertyType === 'Township') {
+    const plots = (property.plots as any[]) || [];
+    const availablePlots = plots.filter((p) => p.status === 'Available');
+
+    let bestPlotScore = -1;
+    let bestScoredSimulated: MatchResult<PropertyLike> | null = null;
+
+    for (const plot of availablePlots) {
+      const simulatedCategory = plot.propertyType === 'Commercial' ? 'Shop' : 'Plot';
+      const simulatedProperty = {
+        ...property,
+        price: plot.price,
+        propertyCategory: simulatedCategory,
+        facing: plot.facing,
+        status: 'Available',
+      };
+
+      const scored = scoreIndividualPropertyForCustomer(customer, simulatedProperty, tolerance);
+      if (scored.matchScore > bestPlotScore) {
+        bestPlotScore = scored.matchScore;
+        bestScoredSimulated = scored;
+      }
+    }
+
+    if (bestScoredSimulated) {
+      return {
+        ...property,
+        price: bestScoredSimulated.price,
+        propertyCategory: bestScoredSimulated.propertyCategory,
+        facing: bestScoredSimulated.facing,
+        matchScore: bestScoredSimulated.matchScore,
+        matchReasons: bestScoredSimulated.matchReasons,
+      };
+    } else {
+      const simulatedProperty = {
+        ...property,
+        price: 0,
+        propertyCategory: 'Plot',
+        status: 'Sold',
+      };
+      return scoreIndividualPropertyForCustomer(customer, simulatedProperty, tolerance);
+    }
+  }
+
+  return scoreIndividualPropertyForCustomer(customer, property, tolerance);
+}
+
 export function matchPropertyForCustomer(customer: CustomerLike, property: PropertyLike, tolerance = true): MatchResult<PropertyLike> | null {
   const scored = scorePropertyForCustomer(customer, property, tolerance);
   const hasLocationMatch = locationMatches(customer.preferredLocations, property);
-  const hasBudgetMatch = budgetMatchesPrice(customer.budget, property.price, tolerance);
+  
+  const priceToEvaluate = property.propertyType === 'Township' ? scored.price : property.price;
+  const categoryToEvaluate = property.propertyType === 'Township' ? scored.propertyCategory : property.propertyCategory;
+  const statusToEvaluate = property.propertyType === 'Township' ? (scored.status === 'Sold' ? 'Sold' : 'Available') : property.status;
+
+  const hasBudgetMatch = budgetMatchesPrice(customer.budget, priceToEvaluate, tolerance);
   const requiredCategory = requestedPropertyCategory(customer.purpose);
-  const hasCategoryMatch = !requiredCategory || normalizeMatchValue(property.propertyCategory) === normalizeMatchValue(requiredCategory);
-  if (property.status === 'Sold' || !hasLocationMatch || !hasBudgetMatch || !hasCategoryMatch) return null;
+  const hasCategoryMatch = !requiredCategory || normalizeMatchValue(categoryToEvaluate) === normalizeMatchValue(requiredCategory);
+  
+  if (statusToEvaluate === 'Sold' || !hasLocationMatch || !hasBudgetMatch || !hasCategoryMatch) return null;
   return scored;
 }
 
 export function rankPropertiesForCustomer(customer: CustomerLike, properties: PropertyLike[], tolerance = true) {
   return properties
-    .filter((property) => property.status !== 'Sold')
+    .filter((property) => {
+      if (property.propertyType === 'Township') {
+        const plots = (property.plots as any[]) || [];
+        return plots.some((p) => p.status === 'Available');
+      }
+      return property.status !== 'Sold';
+    })
     .map((property) => scorePropertyForCustomer(customer, property, tolerance))
     .sort((a, b) => b.matchScore - a.matchScore || (String((a as any).projectName || (a as any).propertyName || '')).localeCompare(String((b as any).projectName || (b as any).propertyName || '')));
 }
