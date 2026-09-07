@@ -8,14 +8,14 @@ import Activity from '@/models/Activity';
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session) {
+    if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const { id } = await params;
     await connectDB();
 
-    const record = await SoldCustomer.findById(id);
+    const record = await SoldCustomer.findOne({ _id: id, userId: session.user.id });
     if (!record) {
       return NextResponse.json({ error: 'Sold customer record not found' }, { status: 404 });
     }
@@ -29,7 +29,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session) {
+    if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -37,6 +37,11 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     const body = await request.json();
 
     await connectDB();
+
+    const existing = await SoldCustomer.findOne({ _id: id, userId: session.user.id });
+    if (!existing) {
+      return NextResponse.json({ error: 'Sold customer record not found' }, { status: 404 });
+    }
 
     if (
       body.squareYard !== undefined ||
@@ -52,11 +57,6 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       body.bookingAmount !== undefined ||
       body.downPayment !== undefined
     ) {
-      const existing = await SoldCustomer.findById(id);
-      if (!existing) {
-        return NextResponse.json({ error: 'Sold customer record not found' }, { status: 404 });
-      }
-
       const squareYard = Number(body.squareYard ?? existing.squareYard ?? 0);
       const ratePerSquareYard = Number(body.ratePerSquareYard ?? existing.ratePerSquareYard ?? 0);
       const demandAmount = squareYard * ratePerSquareYard;
@@ -88,14 +88,15 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       });
     }
 
-    // Find and update Sold Customer Record
-    const record = await SoldCustomer.findByIdAndUpdate(id, body, { new: true, runValidators: true });
+    // Find and update Sold Customer Record belonging to user
+    const record = await SoldCustomer.findOneAndUpdate({ _id: id, userId: session.user.id }, body, { new: true, runValidators: true });
     if (!record) {
       return NextResponse.json({ error: 'Sold customer record not found' }, { status: 404 });
     }
 
     // Log Activity
     await Activity.create({
+      userId: session.user.id,
       customerId: record.customerId,
       type: 'Negotiation',
       description: `Sold transaction details updated by Admin: Registry: ${record.registryStatus}, Payment: ${record.paymentStatus}.`
@@ -110,14 +111,14 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session) {
+    if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const { id } = await params;
     await connectDB();
 
-    const record = await SoldCustomer.findByIdAndDelete(id);
+    const record = await SoldCustomer.findOneAndDelete({ _id: id, userId: session.user.id });
     if (!record) {
       return NextResponse.json({ error: 'Sold customer record not found' }, { status: 404 });
     }

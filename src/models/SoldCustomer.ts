@@ -18,6 +18,7 @@ const PaymentHistorySchema = new mongoose.Schema({
 
 const SoldCustomerSchema = new mongoose.Schema(
   {
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     customerId: { type: mongoose.Schema.Types.ObjectId, ref: 'Customer', required: true },
     customerName: { type: String, required: true },
     mobile: { type: String, required: true },

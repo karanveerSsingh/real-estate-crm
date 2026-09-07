@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 
 const SettingSchema = new mongoose.Schema(
   {
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', index: true },
     companyName: { type: String, default: 'Invest with Karanveer' },
     logoUrl: { type: String, default: '' },
     officeAddress: { type: String, default: '123 Business Park, Tonk Road, Jaipur' },

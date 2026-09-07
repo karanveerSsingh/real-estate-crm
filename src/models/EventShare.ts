@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 
 const EventShareSchema = new mongoose.Schema(
   {
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     customerIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Customer', required: true }],
     platforms: [{ type: String, enum: ['whatsapp', 'facebook', 'instagram', 'linkedin', 'x', 'other'], required: true }],
     message: { type: String, required: true, trim: true },

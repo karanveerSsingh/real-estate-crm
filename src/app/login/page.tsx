@@ -8,7 +8,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import toast from "react-hot-toast";
-import { Lock, Mail, Sparkles, Loader2, Key } from "lucide-react";
+import { Lock, Mail, Sparkles, Loader2, Key, Building2 } from "lucide-react";
 import { motion } from "framer-motion";
 
 const loginSchema = z.object({
@@ -25,12 +25,10 @@ export default function LoginPage() {
 
   // Redirect if already authenticated
   useEffect(() => {
-    console.log("[Login] Session status checked:", status, "Session info:", session ? { email: session.user?.email, role: (session.user as any)?.role } : null);
     if (status === "authenticated") {
-      console.log("[Login] Authenticated status confirmed, redirecting to /dashboard");
       router.replace("/dashboard");
     }
-  }, [status, router, session]);
+  }, [status, router]);
 
   const {
     register,
@@ -39,24 +37,21 @@ export default function LoginPage() {
   } = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
-      email: "admin123@gmail.com",
+      email: "",
       password: "",
     },
   });
 
   const onSubmit = async (data: LoginFormValues) => {
     setLoading(true);
-    const loadingToast = toast.loading("Authenticating admin...");
-    console.log("[Login] Executing credentials signIn for:", data.email.toLowerCase());
+    const loadingToast = toast.loading("Authenticating session...");
 
     try {
       const result = await signIn("credentials", {
-        email: data.email.toLowerCase(),
+        email: data.email.toLowerCase().trim(),
         password: data.password,
         redirect: false,
       });
-
-      console.log("[Login] signIn callback result:", result ? { ok: result.ok, status: result.status, error: result.error } : null);
 
       toast.dismiss(loadingToast);
 
@@ -64,20 +59,14 @@ export default function LoginPage() {
         toast.error(result.error || "Invalid credentials");
       } else if (result?.ok) {
         toast.success("Successfully logged in! Welcome back.");
-        
+
         if (typeof update === "function") {
-          console.log("[Login] Forcing useSession update...");
-          const updatedSession = await update();
-          console.log("[Login] Session update completed:", updatedSession);
-        } else {
-          console.warn("[Login] useSession update function is unavailable");
+          await update();
         }
 
-        console.log("[Login] Replacing route to /dashboard");
         router.replace("/dashboard");
       }
     } catch (err) {
-      console.error("[Login] Unexpected sign-in error:", err);
       toast.dismiss(loadingToast);
       toast.error("An unexpected error occurred. Please try again.");
     } finally {
@@ -90,9 +79,7 @@ export default function LoginPage() {
       <div className="min-h-screen bg-[#060814] flex items-center justify-center">
         <div className="text-center space-y-4">
           <Loader2 className="h-10 w-10 animate-spin text-blue-500 mx-auto" />
-          <p className="text-gray-400 text-sm font-medium">
-            Loading session...
-          </p>
+          <p className="text-gray-400 text-sm font-medium">Loading session...</p>
         </div>
       </div>
     );
@@ -103,9 +90,7 @@ export default function LoginPage() {
       <div className="min-h-screen bg-[#060814] flex items-center justify-center">
         <div className="text-center space-y-4">
           <Loader2 className="h-10 w-10 animate-spin text-blue-500 mx-auto" />
-          <p className="text-gray-400 text-sm font-medium">
-            Redirecting to dashboard...
-          </p>
+          <p className="text-gray-400 text-sm font-medium">Redirecting to dashboard...</p>
         </div>
       </div>
     );
@@ -121,23 +106,18 @@ export default function LoginPage() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
-        className="w-full max-w-md bg-[#0f1322]/80 backdrop-blur-xl border border-gray-800 rounded-2xl shadow-2xl p-6 sm:p-8 relative z-10 pulse-glow"
+        className="w-full max-w-md bg-[#0f1322]/80 backdrop-blur-xl border border-gray-800 rounded-2xl shadow-2xl p-6 sm:p-8 relative z-10"
       >
         {/* Brand/Heading */}
         <div className="text-center space-y-2 mb-8">
-          <div className="inline-flex items-center justify-center h-12 w-12 rounded-xl bg-blue-500/10 border border-blue-500/25 text-blue-400 mb-2">
-            {/* <Sparkles className="h-6 w-6" /> */}
-            <img
-              src="/investWithKaranveer.jpeg"
-              alt="Logo"
-              className="h-full w-full object-contain border "
-            />
+          <div className="inline-flex items-center justify-center h-12 w-12 rounded-xl bg-blue-500/10 border border-blue-500/25 text-blue-400 mb-2 overflow-hidden">
+            <Building2 className="h-6 w-6 text-blue-400" />
           </div>
           <h2 className="text-2xl font-bold tracking-tight text-white">
-            Invest with Karanveer
+            Real Estate CRM Login
           </h2>
           <p className="text-gray-400 text-xs sm:text-sm">
-            Enter admin credentials to access your CRM catalog.
+            Enter your credentials to access your private CRM catalog.
           </p>
         </div>
 
@@ -153,7 +133,7 @@ export default function LoginPage() {
               <input
                 {...register("email")}
                 type="email"
-                placeholder="admin123@gmai.com"
+                placeholder="you@example.com"
                 disabled={loading}
                 className="w-full pl-10 pr-4 py-2.5 bg-[#080a14] border border-gray-800 rounded-xl text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-all disabled:opacity-50"
               />
@@ -211,14 +191,8 @@ export default function LoginPage() {
 
         <div className="mt-4 text-center text-sm text-gray-400">
           Don't have an account?{" "}
-          {/* <Link
-            href="/signup"
-            className="text-blue-400 hover:text-blue-300 font-semibold"
-          >
-            Sign Up
-          </Link> */}
           <Link
-            href=""
+            href="/signup"
             className="text-blue-400 hover:text-blue-300 font-semibold"
           >
             Sign Up
@@ -232,12 +206,11 @@ export default function LoginPage() {
           </div>
           <div>
             <span className="font-semibold text-gray-300 block mb-0.5">
-              Demo System Info
+              Seeded Admin Account
             </span>
-            Seeded Admin:{" "}
-            <span className="font-mono text-blue-400">admin123@gmail.com</span>
+            Email: <span className="font-mono text-blue-400">admin123@gmail.com</span>
             <br />
-            Password: <span className="font-mono text-blue-400">123456789</span>
+            Password: <span className="font-mono text-blue-400">admin123</span>
           </div>
         </div>
       </motion.div>

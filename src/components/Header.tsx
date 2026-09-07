@@ -4,12 +4,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useSession, signOut } from 'next-auth/react';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
-import { 
-  Bell, 
-  Search, 
-  Sun, 
-  Moon, 
-  User, 
+import {
+  Bell,
+  Search,
+  Sun,
+  Moon,
+  User,
   Menu,
   LogOut,
   Cake,
@@ -52,7 +52,7 @@ export default function Header({ sidebarCollapsed: _sidebarCollapsed, setSidebar
 
   // Search input state
   const [searchVal, setSearchVal] = useState('');
-  
+
   // Sync searchVal with URL search param
   useEffect(() => {
     setSearchVal(urlSearchValue);
@@ -205,7 +205,7 @@ export default function Header({ sidebarCollapsed: _sidebarCollapsed, setSidebar
 
   return (
     <header className="sticky top-0 z-10 h-16 flex items-center justify-between px-4 border-b border-[var(--border)] bg-[var(--card)]/80 backdrop-blur-md transition-all duration-300">
-      
+
       {/* Menu / Breadcrumb */}
       <div className="flex items-center gap-3">
         <button
@@ -240,12 +240,12 @@ export default function Header({ sidebarCollapsed: _sidebarCollapsed, setSidebar
 
       {/* Right side items */}
       <div className="flex items-center gap-2 sm:gap-3">
-        
+
         {/* Notifications Bell */}
         <div className="relative" ref={dropdownRef}>
           <button
             onClick={() => setShowNotifDropdown(!showNotifDropdown)}
-            className="p-2 rounded-lg border border-[var(--border)] bg-[var(--card)] hover:bg-[var(--secondary)] text-[var(--muted)] hover:text-[var(--foreground)] relative transition-colors cursor-pointer"
+            className="p-2 rounded-lg border border-[var(--border) bg-[var(--card)] hover:bg-[var(--secondary)] text-[var(--muted)] hover:text-[var(--foreground)] relative transition-colors cursor-pointer"
           >
             <Bell className="h-4.5 w-4.5" />
             {unreadCount > 0 && (
@@ -257,11 +257,11 @@ export default function Header({ sidebarCollapsed: _sidebarCollapsed, setSidebar
 
           {/* Notifications Dropdown Panel */}
           {showNotifDropdown && (
-            <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-[var(--card)] border border-[var(--border)] rounded-xl shadow-lg z-30 overflow-hidden flex flex-col max-h-[480px]">
-              <div className="p-3 border-b border-[var(--border)] flex items-center justify-between bg-[var(--background)]">
+            <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-[var(--card)] border border-[var(--border)] rounded-xl shadow-lg z-30 overflow-hidden flex flex-col `max-h-[480px]`">
+              <div className="p-3 border-b `border-[var(--border)]` flex items-center justify-between `bg-[var(--background)]`">
                 <span className="text-sm font-semibold">Reminders & Alerts</span>
                 {unreadCount > 0 && (
-                  <button 
+                  <button
                     onClick={markAllAsRead}
                     className="text-xs text-blue-500 hover:text-blue-600 font-medium cursor-pointer"
                   >
@@ -269,7 +269,7 @@ export default function Header({ sidebarCollapsed: _sidebarCollapsed, setSidebar
                   </button>
                 )}
               </div>
-              
+
               <div className="flex-1 overflow-y-auto divide-y divide-[var(--border)]">
                 {notifications.length === 0 ? (
                   <div className="p-8 text-center text-[var(--muted)] text-sm">
@@ -287,21 +287,19 @@ export default function Header({ sidebarCollapsed: _sidebarCollapsed, setSidebar
                       <div
                         key={notif._id}
                         onClick={() => handleNotificationClick(notif)}
-                        className={`p-3 flex items-start gap-3 transition-colors cursor-pointer hover:bg-[var(--secondary)] ${
-                          isUnread ? 'bg-blue-600/5' : ''
-                        }`}
+                        className={`p-3 flex items-start gap-3 transition-colors cursor-pointer hover:bg-[var(--secondary)] ${isUnread ? 'bg-blue-600/5' : ''
+                          }`}
                       >
                         {/* Dynamic Notification Icon Type */}
-                        <div className={`p-1.5 rounded-lg shrink-0 ${
-                          notif.type === 'FollowUp' ? 'bg-amber-500/10 text-amber-500' :
+                        <div className={`p-1.5 rounded-lg shrink-0 ${notif.type === 'FollowUp' ? 'bg-amber-500/10 text-amber-500' :
                           notif.type === 'Booking' ? 'bg-green-500/10 text-green-500' :
-                          notif.type === 'Registry' ? 'bg-rose-500/10 text-rose-500' :
-                          'bg-blue-500/10 text-blue-500'
-                        }`}>
+                            notif.type === 'Registry' ? 'bg-rose-500/10 text-rose-500' :
+                              'bg-blue-500/10 text-blue-500'
+                          }`}>
                           {notif.type === 'Birthday' ? <Cake className="h-4 w-4" /> :
-                           notif.type === 'FollowUp' ? <CalendarDays className="h-4 w-4" /> :
-                           notif.type === 'Registry' ? <FileBadge className="h-4 w-4" /> :
-                           <Sparkles className="h-4 w-4" />}
+                            notif.type === 'FollowUp' ? <CalendarDays className="h-4 w-4" /> :
+                              notif.type === 'Registry' ? <FileBadge className="h-4 w-4" /> :
+                                <Sparkles className="h-4 w-4" />}
                         </div>
 
                         <div className="flex-1 min-w-0">
@@ -330,8 +328,8 @@ export default function Header({ sidebarCollapsed: _sidebarCollapsed, setSidebar
                 )}
               </div>
               <div className="p-2 border-t border-[var(--border)] text-center bg-[var(--background)]">
-                <Link 
-                  href="/dashboard/calendar" 
+                <Link
+                  href="/dashboard/calendar"
                   className="text-xs text-[var(--muted)] hover:text-[var(--foreground)] font-medium inline-block py-1 cursor-pointer"
                   onClick={() => setShowNotifDropdown(false)}
                 >
@@ -349,7 +347,16 @@ export default function Header({ sidebarCollapsed: _sidebarCollapsed, setSidebar
             className="h-8 w-8 rounded-full bg-blue-500/10 text-blue-500 border border-blue-500/20 flex items-center justify-center shrink-0"
             aria-label="Open user menu"
           >
-            <User className="h-4 w-4" />
+            {session?.user?.profileImage ? (
+              <img
+                src={session.user.profileImage}
+                alt={session?.user?.brandName ? `${session.user.brandName} logo` : 'User logo'}
+                className="h-8 w-8 rounded-full object-cover"
+              />
+            ) : (
+              <User className="h-4 w-4" />
+            )}
+
           </button>
 
           <div className="hidden lg:block text-left select-none">
@@ -357,7 +364,7 @@ export default function Header({ sidebarCollapsed: _sidebarCollapsed, setSidebar
               {session?.user?.name || 'Admin User'}
             </p>
             <span className="text-[10px] font-medium text-[var(--muted)]">
-              System Admin
+              {session?.user?.brandName || 'System Admin'}
             </span>
           </div>
 
@@ -367,7 +374,7 @@ export default function Header({ sidebarCollapsed: _sidebarCollapsed, setSidebar
                 <p className="text-sm font-semibold text-[var(--foreground)] truncate">
                   {session?.user?.name || 'Admin User'}
                 </p>
-                <p className="text-xs text-[var(--muted)]">System Admin</p>
+                <p className="text-xs text-[var(--muted)]">{session?.user?.brandName || 'System Admin'}</p>
               </div>
               <button
                 type="button"

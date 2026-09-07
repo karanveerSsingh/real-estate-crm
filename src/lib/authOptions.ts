@@ -8,7 +8,9 @@ const DEMO_ADMIN = {
   id: 'demo-admin',
   email: 'admin123@gmail.com',
   name: 'Admin CRM',
-  role: 'admin'
+  role: 'admin',
+  brandName: 'Invest with Karanveer',
+  profileImage: '/investWithKaranveer.jpeg'
 };
 
 function canUseDemoAdminFallback(credentials: Record<'email' | 'password', string>) {
@@ -65,16 +67,13 @@ export const authOptions: AuthOptions = {
           throw new Error('Invalid email or password');
         }
 
-        // Verify the user role is admin
-        if (user.role !== 'admin') {
-          throw new Error('Access denied. Admin role required.');
-        }
-
         return {
           id: user._id.toString(),
           email: user.email,
           name: user.name,
-          role: user.role
+          role: user.role || 'admin',
+          brandName: user.brandName || 'Invest with',
+          profileImage: user.profileImage || ''
         };
       }
     })
@@ -84,22 +83,26 @@ export const authOptions: AuthOptions = {
     maxAge: 24 * 60 * 60, // 24 hours
   },
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger, session }) {
       if (user) {
         token.id = user.id;
-        token.role = (user as { role?: string }).role;
+        token.role = (user as any).role;
+        token.brandName = (user as any).brandName;
+        token.profileImage = (user as any).profileImage;
+      }
+      if (trigger === 'update' && session) {
+        if (session.name) token.name = session.name;
+        if (session.brandName) token.brandName = session.brandName;
+        if (session.profileImage) token.profileImage = session.profileImage;
       }
       return token;
     },
     async session({ session, token }) {
       if (session.user) {
-        const sessionUser = session.user as typeof session.user & {
-          id?: unknown;
-          role?: unknown;
-        };
-
-        sessionUser.id = token.id;
-        sessionUser.role = token.role;
+        session.user.id = token.id as string;
+        session.user.role = token.role as string;
+        session.user.brandName = token.brandName as string;
+        session.user.profileImage = token.profileImage as string;
       }
       return session;
     }

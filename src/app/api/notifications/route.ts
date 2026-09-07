@@ -6,13 +6,13 @@ import Customer from '@/models/Customer';
 import Notification from '@/models/Notification';
 import { createErrorResponse } from '@/lib/apiFallbacks';
 
-async function createBirthdayNotifications() {
+async function createBirthdayNotifications(userId: string) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const inSevenDays = new Date(today);
   inSevenDays.setDate(inSevenDays.getDate() + 7);
 
-  const customers = await Customer.find({ dateOfBirth: { $ne: null } });
+  const customers = await Customer.find({ userId, dateOfBirth: { $ne: null } });
 
   for (const customer of customers) {
     if (!customer.dateOfBirth) continue;
@@ -32,6 +32,7 @@ async function createBirthdayNotifications() {
       : `${customer.fullName}'s birthday is in ${diffDays} day${diffDays === 1 ? '' : 's'} on ${birthdayTarget.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}.`;
 
     const existing = await Notification.findOne({
+      userId,
       type: 'Birthday',
       customerId: customer._id,
       date: birthdayTarget,
@@ -40,6 +41,7 @@ async function createBirthdayNotifications() {
     if (existing) continue;
 
     await Notification.create({
+      userId,
       title,
       message,
       type: 'Birthday',
@@ -52,18 +54,20 @@ async function createBirthdayNotifications() {
 export async function GET() {
   try {
     const session = await getServerSession(authOptions);
-    if (!session) {
+    if (!session?.user?.id) {
       return NextResponse.json([], { status: 200 });
     }
 
+    const userId = session.user.id;
+
     try {
       await connectDB();
-      await createBirthdayNotifications();
+      await createBirthdayNotifications(userId);
     } catch (dbError) {
       return NextResponse.json([], { status: 200 });
     }
 
-    const notifications = await Notification.find()
+    const notifications = await Notification.find({ userId })
       .populate('customerId', 'fullName')
       .sort({ createdAt: -1 })
       .limit(50);
@@ -77,10 +81,11 @@ export async function GET() {
 export async function PUT(request: Request) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session) {
+    if (!session?.user?.id) {
       return NextResponse.json([], { status: 200 });
     }
 
+    const userId = session.user.id;
     const { id, all } = await request.json();
     try {
       await connectDB();
@@ -89,13 +94,13 @@ export async function PUT(request: Request) {
     }
 
     if (all) {
-      await Notification.updateMany({ read: false }, { $set: { read: true } });
+      await Notification.updateMany({ userId, read: false }, { $set: { read: true } });
       return NextResponse.json({ success: true, message: 'All notifications marked as read' });
     }
 
     if (id) {
-      const notification = await Notification.findByIdAndUpdate(
-        id,
+      const notification = await Notification.findOneAndUpdate(
+        { _id: id, userId },
         { $set: { read: true } },
         { new: true }
       );
@@ -107,6 +112,7 @@ export async function PUT(request: Request) {
     return createErrorResponse(error);
   }
 }
+
 export async function POST(request: Request) {
   return PUT(request);
 }

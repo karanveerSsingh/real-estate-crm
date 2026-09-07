@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 
 const ActivitySchema = new mongoose.Schema(
   {
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     customerId: { type: mongoose.Schema.Types.ObjectId, ref: 'Customer', required: true },
     type: { 
       type: String, 

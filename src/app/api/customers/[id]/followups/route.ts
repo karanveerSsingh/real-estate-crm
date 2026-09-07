@@ -11,14 +11,14 @@ import Customer from '@/models/Customer';
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session) {
+    if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const { id } = await params;
     await connectDB();
 
-    const followUps = await FollowUp.find({ customerId: id }).sort({ date: -1, time: -1 });
+    const followUps = await FollowUp.find({ customerId: id, userId: session.user.id }).sort({ date: -1, time: -1 });
     return NextResponse.json(followUps);
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -28,7 +28,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session) {
+    if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -42,8 +42,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     await connectDB();
 
+    // Verify customer belongs to current user
+    const customer = await Customer.findOne({ _id: id, userId: session.user.id });
+    if (!customer) {
+      return NextResponse.json({ error: 'Customer not found' }, { status: 404 });
+    }
+
     // Create the Follow-up
     const followUp = await FollowUp.create({
+      userId: session.user.id,
       customerId: id,
       title,
       date: new Date(date),
@@ -60,6 +67,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     // Log Activity
     await Activity.create({
+      userId: session.user.id,
       customerId: id,
       type: type === 'Property Visit' ? 'Site Visit' : 'Called',
       description: type === 'Property Visit'
@@ -69,6 +77,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     // Add In-App Notification
     await Notification.create({
+      userId: session.user.id,
       title: 'Follow-up Scheduled',
       message: `Follow-up "${title}" scheduled for ${date} at ${time} (Priority: ${priority}).`,
       type: 'FollowUp',
@@ -85,7 +94,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session) {
+    if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -108,7 +117,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     if (priority) updateFields.priority = priority;
 
     const followUp = await FollowUp.findOneAndUpdate(
-      { _id: followUpId, customerId: id },
+      { _id: followUpId, customerId: id, userId: session.user.id },
       { $set: updateFields },
       { new: true }
     );
@@ -121,6 +130,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       const plannedVisitAt = new Date(`${new Date(followUp.date).toISOString().slice(0, 10)}T${followUp.time}`);
       const actualVisitAt = new Date();
       const visit = await CustomerVisit.create({
+        userId: session.user.id,
         customerId: id,
         propertyId: followUp.propertyId,
         propertyName: followUp.propertyName,
@@ -136,12 +146,13 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       followUp.customerVisitId = visit._id;
       followUp.actualVisitAt = actualVisitAt;
       await followUp.save();
-      await Customer.updateOne({ _id: id, leadStatus: { $nin: ['Sold', 'Lost'] } }, { leadStatus: 'Site Visit' });
+      await Customer.updateOne({ _id: id, userId: session.user.id, leadStatus: { $nin: ['Sold', 'Lost'] } }, { leadStatus: 'Site Visit' });
     }
 
     // Log status updates
     if (status === 'Completed') {
       await Activity.create({
+        userId: session.user.id,
         customerId: id,
         type: followUp.type === 'Property Visit' ? 'Site Visit' : 'Follow-up Done',
         description: followUp.type === 'Property Visit'

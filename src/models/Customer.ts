@@ -3,6 +3,7 @@ import { PURPOSE_OPTIONS } from '@/lib/crmOptions';
 
 const CustomerSchema = new mongoose.Schema(
   {
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     fullName: { type: String, required: true },
     mobileNumber: { type: String, required: true },
     whatsAppNumber: { type: String, required: true },
@@ -68,6 +69,10 @@ function calculateLeadScore(doc: any) {
 CustomerSchema.pre('save', function () {
   this.leadScore = calculateLeadScore(this);
 });
+
+if (mongoose.models.Customer && !mongoose.models.Customer.schema.path('userId')) {
+  mongoose.deleteModel('Customer');
+}
 
 export default mongoose.models.Customer || mongoose.model('Customer', CustomerSchema);
 export { calculateLeadScore };

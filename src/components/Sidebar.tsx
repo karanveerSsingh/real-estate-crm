@@ -3,17 +3,19 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { signOut } from 'next-auth/react';
-import { 
-  LayoutDashboard, 
-  Users, 
-  HandCoins, 
-  Building2, 
-  Calendar, 
+// import { signOut } from 'next-auth/react';
+import { useSession, signOut } from 'next-auth/react';
+
+import {
+  LayoutDashboard,
+  Users,
+  HandCoins,
+  Building2,
+  Calendar,
   CalendarHeart,
-  Settings, 
-  LogOut, 
-  ChevronLeft, 
+  Settings,
+  LogOut,
+  ChevronLeft,
   ChevronRight,
   Sparkles
 } from 'lucide-react';
@@ -27,6 +29,7 @@ interface SidebarProps {
 
 export default function Sidebar({ collapsed, setCollapsed, onClose }: SidebarProps) {
   const pathname = usePathname();
+  const { data: session } = useSession();
 
   const menuItems = [
     { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
@@ -39,28 +42,27 @@ export default function Sidebar({ collapsed, setCollapsed, onClose }: SidebarPro
   ];
 
   return (
-    <aside 
-      className={`fixed top-0 left-0 z-20 h-screen border-r transition-all duration-300 flex flex-col bg-[var(--sidebar)] border-[var(--sidebar-border)] ${
-        collapsed ? 'w-16' : 'w-64'
-      }`}
+    <aside
+      className={`fixed top-0 left-0 z-20 h-screen border-r transition-all duration-300 flex flex-col bg-[var(--sidebar)] border-[var(--sidebar-border)] ${collapsed ? 'w-16' : 'w-64'
+        }`}
     >
       {/* Brand Logo Header */}
       <div className="h-16 flex items-center justify-between px-4 border-b border-[var(--sidebar-border)]">
         {!collapsed ? (
           <div className="flex items-center gap-2 font-bold text-lg bg-gradient-to-r from-blue-500 to-indigo-500 bg-clip-text text-transparent">
             {/* <Sparkles className="h-5 w-5 text-blue-500" /> */}
-            <span>Invest with Karanveer</span>
-          </div>
-        ) 
-        : (
-          <div className="mx-auto text-blue-500">
-            {/* <Sparkles className="h-6 w-6" /> */}
+            <span>{session?.user?.brandName || 'Invest with Karanveer'}</span>
           </div>
         )
+          : (
+            <div className="mx-auto text-blue-500">
+              {/* <Sparkles className="h-6 w-6" /> */}
+            </div>
+          )
         }
-        
+
         {/* Collapse Button */}
-        <button 
+        <button
           onClick={() => setCollapsed(!collapsed)}
           className="hidden md:flex items-center justify-center p-1 rounded-md border border-[var(--border)] bg-[var(--card)] hover:bg-[var(--secondary)] text-[var(--muted)] hover:text-[var(--foreground)] transition-colors cursor-pointer"
         >
@@ -78,11 +80,10 @@ export default function Sidebar({ collapsed, setCollapsed, onClose }: SidebarPro
             <Link
               key={item.path}
               href={item.path}
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 cursor-pointer ${
-                isActive 
-                  ? 'bg-blue-600/10 text-blue-500 border-l-4 border-blue-600 pl-2' 
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 cursor-pointer ${isActive
+                  ? 'bg-blue-600/10 text-blue-500 border-l-4 border-blue-600 pl-2'
                   : 'text-[var(--muted)] hover:bg-[var(--secondary)] hover:text-[var(--foreground)]'
-              }`}
+                }`}
               onClick={() => onClose && onClose()}
             >
               <Icon className={`h-5 w-5 shrink-0 ${isActive ? 'text-blue-500' : ''}`} />

@@ -28,7 +28,7 @@ const customerUpdateValidator = z.object({
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session) {
+    if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -39,7 +39,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       return NextResponse.json({ error: 'Database unavailable' }, { status: 503 });
     }
 
-    const customer = await Customer.findById(id);
+    const customer = await Customer.findOne({ _id: id, userId: session.user.id });
     if (!customer) {
       return NextResponse.json({ error: 'Customer not found' }, { status: 404 });
     }
@@ -53,7 +53,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session) {
+    if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -69,13 +69,15 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       return NextResponse.json({ error: 'Database unavailable' }, { status: 503 });
     }
 
-    const oldCustomer = await Customer.findById(id);
+    const oldCustomer = await Customer.findOne({ _id: id, userId: session.user.id });
     if (!oldCustomer) {
       return NextResponse.json({ error: 'Customer not found' }, { status: 404 });
     }
 
     // Check if status changed to log activity
-    const statusChanged = validated.leadStatus && validated.leadStatus !== oldCustomer.leadStatus;
+    const previousStatus = oldCustomer.leadStatus;
+    const previousNotes = oldCustomer.notes;
+    const statusChanged = validated.leadStatus && validated.leadStatus !== previousStatus;
 
     const updateData = {
       ...validated,
@@ -89,15 +91,17 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     // If status changed, log it in Timeline
     if (statusChanged) {
       await Activity.create({
+        userId: session.user.id,
         customerId: id,
         type: validated.leadStatus === 'Sold' ? 'Sold' : validated.leadStatus === 'Booked' ? 'Booked' : 'Negotiation',
-        description: `Lead status changed from ${oldCustomer.leadStatus} to ${validated.leadStatus}.`
+        description: `Lead status changed from ${previousStatus} to ${validated.leadStatus}.`
       });
     }
 
     // If notes changed, log a note added activity
-    if (validated.notes && validated.notes !== oldCustomer.notes) {
+    if (validated.notes && validated.notes !== previousNotes) {
       await Activity.create({
+        userId: session.user.id,
         customerId: id,
         type: 'Note Added',
         description: `Admin updated customer notes.`
@@ -116,7 +120,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session) {
+    if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -127,16 +131,16 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
       return NextResponse.json({ error: 'Database unavailable' }, { status: 503 });
     }
 
-    const customer = await Customer.findByIdAndDelete(id);
+    const customer = await Customer.findOneAndDelete({ _id: id, userId: session.user.id });
     if (!customer) {
       return NextResponse.json({ error: 'Customer not found' }, { status: 404 });
     }
 
-    // Cascade delete associated records
-    await FollowUp.deleteMany({ customerId: id });
-    await Activity.deleteMany({ customerId: id });
-    await SoldCustomer.deleteMany({ customerId: id });
-    await Notification.deleteMany({ customerId: id });
+    // Cascade delete associated records belonging to user
+    await FollowUp.deleteMany({ customerId: id, userId: session.user.id });
+    await Activity.deleteMany({ customerId: id, userId: session.user.id });
+    await SoldCustomer.deleteMany({ customerId: id, userId: session.user.id });
+    await Notification.deleteMany({ customerId: id, userId: session.user.id });
 
     return NextResponse.json({ message: 'Customer and all associated data deleted successfully' });
   } catch (error: unknown) {

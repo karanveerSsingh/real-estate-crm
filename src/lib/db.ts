@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { ensureDataMigration } from './dbMigration';
 
 const MONGODB_URI = process.env.MONGODB_URI;
 
@@ -30,6 +31,7 @@ async function connectDB() {
 
   try {
     cached.conn = await cached.promise;
+    void ensureDataMigration();
   } catch (e) {
     cached.promise = null;
     throw e;

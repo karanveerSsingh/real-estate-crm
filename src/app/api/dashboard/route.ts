@@ -11,9 +11,11 @@ import { createDashboardFallback, createErrorResponse } from '@/lib/apiFallbacks
 export async function GET() {
   try {
     const session = await getServerSession(authOptions);
-    if (!session) {
+    if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+
+    const userId = session.user.id;
 
     try {
       await connectDB();
@@ -31,53 +33,58 @@ export async function GET() {
     endOfTomorrow.setDate(endOfTomorrow.getDate() + 1);
 
     // --- 1. CORE COUNTS & STATS ---
-    const totalLeads = await Customer.countDocuments();
-    const newLeads = await Customer.countDocuments({ leadStatus: 'New' });
-    const interestedLeads = await Customer.countDocuments({ leadStatus: 'Interested' });
+    const totalLeads = await Customer.countDocuments({ userId });
+    const newLeads = await Customer.countDocuments({ userId, leadStatus: 'New' });
+    const interestedLeads = await Customer.countDocuments({ userId, leadStatus: 'Interested' });
+    
     // Follow-ups
     const todayFollowups = await FollowUp.countDocuments({
+      userId,
       status: 'Pending',
       date: { $gte: startOfToday, $lte: endOfToday }
     });
     const tomorrowFollowups = await FollowUp.countDocuments({
+      userId,
       status: 'Pending',
       date: { $gte: startOfTomorrow, $lte: endOfTomorrow }
     });
     const overdueFollowups = await FollowUp.countDocuments({
+      userId,
       status: 'Pending',
       date: { $lt: startOfToday }
     });
-    const todayVisitQuery = { type: 'Property Visit', date: { $gte: startOfToday, $lte: endOfToday } };
+
+    const todayVisitQuery = { userId, type: 'Property Visit', date: { $gte: startOfToday, $lte: endOfToday } };
     const todayPlannedVisits = await FollowUp.countDocuments(todayVisitQuery);
     const todayCompletedVisits = await FollowUp.countDocuments({ ...todayVisitQuery, status: 'Completed' });
     const todayPendingVisits = await FollowUp.countDocuments({ ...todayVisitQuery, status: { $in: ['Planned', 'Pending'] } });
 
     // Sales metrics
-    const soldCustomers = await SoldCustomer.find();
+    const soldCustomers = await SoldCustomer.find({ userId });
     const totalSales = soldCustomers.length;
     const totalRevenue = soldCustomers.reduce((acc, curr) => acc + (curr.totalAmount || 0), 0);
     const totalBookings = soldCustomers.reduce((acc, curr) => acc + (curr.bookingAmount || 0), 0);
 
     // --- 2. WIDGETS ---
-    const upcomingSiteVisits = await Customer.find({ leadStatus: 'Site Visit' }).limit(5);
-    const recentCustomers = await Customer.find().sort({ createdAt: -1 }).limit(5);
-    const recentlySold = await SoldCustomer.find().sort({ createdAt: -1 }).limit(5);
-    const pendingFollowupsList = await FollowUp.find({ status: 'Pending' })
+    const upcomingSiteVisits = await Customer.find({ userId, leadStatus: 'Site Visit' }).limit(5);
+    const recentCustomers = await Customer.find({ userId }).sort({ createdAt: -1 }).limit(5);
+    const recentlySold = await SoldCustomer.find({ userId }).sort({ createdAt: -1 }).limit(5);
+    const pendingFollowupsList = await FollowUp.find({ userId, status: 'Pending' })
       .populate('customerId', 'fullName mobileNumber')
       .sort({ date: 1, time: 1 })
       .limit(5);
 
     const highPriorityLeads = await Customer.find({ 
+      userId,
       leadStatus: { $in: ['Interested', 'Site Visit', 'Negotiation'] } 
     }).sort({ leadScore: -1 }).limit(5);
 
-    const recentActivities = await Activity.find()
+    const recentActivities = await Activity.find({ userId })
       .populate('customerId', 'fullName')
       .sort({ timestamp: -1 })
       .limit(8);
 
     // --- 3. GRAPH AGGREGATIONS ---
-    // A. Monthly Leads & B. Monthly Sales (in-memory processing for 100% database compatibility)
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     
     // Monthly Leads (current year)
@@ -86,6 +93,7 @@ export async function GET() {
     const endOfYear = new Date(currentYear, 11, 31, 23, 59, 59, 999);
 
     const leadsInYear = await Customer.find({
+      userId,
       createdAt: { $gte: startOfYear, $lte: endOfYear }
     }, 'createdAt');
 
@@ -102,6 +110,7 @@ export async function GET() {
 
     // Monthly Sales (current year)
     const salesInYear = await SoldCustomer.find({
+      userId,
       bookingDate: { $gte: startOfYear, $lte: endOfYear }
     }, 'totalAmount bookingDate');
 
@@ -117,8 +126,7 @@ export async function GET() {
     }));
 
     // C. Location Wise Leads
-    // Get all leads preferred locations
-    const allLeadsLocations = await Customer.find({}, 'preferredLocations');
+    const allLeadsLocations = await Customer.find({ userId }, 'preferredLocations');
     const locationCounts: { [key: string]: number } = {
       'Agra Road': 0,
       'Delhi Road': 0,
@@ -175,6 +183,7 @@ export async function GET() {
     return createErrorResponse(error);
   }
 }
+
 export async function POST() {
   return GET();
 }

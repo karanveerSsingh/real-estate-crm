@@ -15,12 +15,13 @@ const shareSchema = z.object({
 
 export async function POST(request: Request) {
   try {
-    if (!await getServerSession(authOptions)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     const payload = shareSchema.parse(await request.json());
     await connectDB();
-    const customers = await Customer.find({ _id: { $in: payload.customerIds } }).select('_id fullName whatsAppNumber');
-    if (customers.length !== new Set(payload.customerIds).size) return NextResponse.json({ error: 'One or more selected customers no longer exist.' }, { status: 400 });
-    const eventShare = await EventShare.create({ ...payload, status: 'ready' });
+    const customers = await Customer.find({ _id: { $in: payload.customerIds }, userId: session.user.id }).select('_id fullName whatsAppNumber');
+    if (customers.length !== new Set(payload.customerIds).size) return NextResponse.json({ error: 'One or more selected customers no longer exist or belong to another account.' }, { status: 400 });
+    const eventShare = await EventShare.create({ ...payload, userId: session.user.id, status: 'ready' });
     return NextResponse.json({ shareId: eventShare._id, customers }, { status: 201 });
   } catch (error) {
     if (error instanceof z.ZodError) return NextResponse.json({ error: error.issues[0]?.message || 'Invalid share request.' }, { status: 400 });
@@ -35,10 +36,11 @@ const updateStatusSchema = z.object({
 
 export async function PATCH(request: Request) {
   try {
-    if (!await getServerSession(authOptions)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     const { shareId, status } = updateStatusSchema.parse(await request.json());
     await connectDB();
-    const eventShare = await EventShare.findByIdAndUpdate(shareId, { $set: { status } }, { new: true });
+    const eventShare = await EventShare.findOneAndUpdate({ _id: shareId, userId: session.user.id }, { $set: { status } }, { new: true });
     if (!eventShare) return NextResponse.json({ error: 'Share record not found.' }, { status: 404 });
     return NextResponse.json({ success: true });
   } catch (error) {

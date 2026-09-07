@@ -25,7 +25,7 @@ const customerValidator = z.object({
 export async function GET(request: Request) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session) {
+    if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -45,7 +45,7 @@ export async function GET(request: Request) {
       return NextResponse.json([], { status: 200 });
     }
 
-    const query: any = {};
+    const query: any = { userId: session.user.id };
 
     // Global Search across multiple fields
     if (search) {
@@ -100,7 +100,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session) {
+    if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -115,14 +115,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Database unavailable' }, { status: 503 });
     }
 
-    // Create Customer
+    // Create Customer under authenticated userId
     const customer = await Customer.create({
       ...validated,
+      userId: session.user.id,
       dateOfBirth: validated.dateOfBirth ? new Date(validated.dateOfBirth) : null
     });
 
     // Log Activity
     await Activity.create({
+      userId: session.user.id,
       customerId: customer._id,
       type: 'Lead Created',
       description: `Lead created for ${customer.fullName} from source ${customer.leadSource}.`

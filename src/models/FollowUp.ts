@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 
 const FollowUpSchema = new mongoose.Schema(
   {
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     customerId: { type: mongoose.Schema.Types.ObjectId, ref: 'Customer', required: true },
     date: { type: Date, required: true },
     time: { type: String, required: true }, // Format "HH:MM"

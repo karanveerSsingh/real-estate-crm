@@ -7,13 +7,13 @@ import Property from '@/models/Property';
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session) {
+    if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const { id } = await params;
     await connectDB();
-    const property = await Property.findById(id);
+    const property = await Property.findOne({ _id: id, userId: session.user.id });
 
     if (!property) {
       return NextResponse.json({ error: 'Property not found' }, { status: 404 });
@@ -28,7 +28,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session) {
+    if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -36,7 +36,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     const body = await request.json();
     await connectDB();
 
-    const property = await Property.findByIdAndUpdate(id, body, { new: true, runValidators: true });
+    const property = await Property.findOneAndUpdate({ _id: id, userId: session.user.id }, body, { new: true, runValidators: true });
 
     if (!property) {
       return NextResponse.json({ error: 'Property not found' }, { status: 404 });
@@ -51,14 +51,14 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session) {
+    if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const { id } = await params;
     await connectDB();
 
-    const property = await Property.findByIdAndDelete(id);
+    const property = await Property.findOneAndDelete({ _id: id, userId: session.user.id });
 
     if (!property) {
       return NextResponse.json({ error: 'Property not found' }, { status: 404 });

@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 
 const CustomerVisitSchema = new mongoose.Schema(
   {
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     customerId: { type: mongoose.Schema.Types.ObjectId, ref: 'Customer', required: true },
     propertyId: { type: mongoose.Schema.Types.ObjectId, ref: 'Property', required: true },
     propertyName: { type: String, required: true },

@@ -10,7 +10,7 @@ import Activity from '@/models/Activity';
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session) {
+    if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -23,11 +23,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: 'No file uploaded' }, { status: 400 });
     }
 
-    // Convert file to array buffer and then write buffer
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
-    // Create upload directory if it does not exist
     const uploadsDir = path.join(process.cwd(), 'public', 'uploads');
     try {
       await fs.access(uploadsDir);
@@ -35,19 +33,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       await fs.mkdir(uploadsDir, { recursive: true });
     }
 
-    // Create unique filename
     const timestamp = Date.now();
     const cleanFileName = `${timestamp}_${file.name.replace(/\s+/g, '_')}`;
     const filePath = path.join(uploadsDir, cleanFileName);
 
-    // Write file to local filesystem
     await fs.writeFile(filePath, buffer);
     const fileUrl = `/uploads/${cleanFileName}`;
 
     await connectDB();
 
-    // Verify if there is a SoldCustomer entry
-    let soldCustomer = await SoldCustomer.findOne({ customerId: id });
+    let soldCustomer = await SoldCustomer.findOne({ customerId: id, userId: session.user.id });
     if (!soldCustomer) {
       return NextResponse.json(
         { error: 'Before uploading documents, the customer must be registered as a Sold Customer.' }, 
@@ -55,7 +50,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       );
     }
 
-    // Push file metadata into SoldCustomer documents
     const docObject = {
       name: file.name,
       url: fileUrl,
@@ -66,8 +60,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     soldCustomer.documents.push(docObject);
     await soldCustomer.save();
 
-    // Log Activity
     await Activity.create({
+      userId: session.user.id,
       customerId: id,
       type: 'Document Uploaded',
       description: `Uploaded document: "${file.name}" of type ${fileType || 'PDF'}.`

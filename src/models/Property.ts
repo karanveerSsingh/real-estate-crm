@@ -14,6 +14,7 @@ const PlotSchema = new mongoose.Schema({
 
 const PropertySchema = new mongoose.Schema(
   {
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     // Common fields
     propertyName: { type: String, required: true }, // For Township, this represents Township/Project Name
     location: { type: String, required: true },

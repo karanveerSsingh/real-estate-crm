@@ -9,7 +9,7 @@ import { rankPropertiesForCustomer } from '@/lib/matching';
 export async function GET(request: Request) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session) {
+    if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -24,7 +24,7 @@ export async function GET(request: Request) {
 
     await connectDB();
 
-    const query: any = {};
+    const query: any = { userId: session.user.id };
 
     if (search) {
       query.$or = [
@@ -45,7 +45,7 @@ export async function GET(request: Request) {
 
     const properties = await Property.find(query).sort({ createdAt: -1 }).lean();
     if (customerId) {
-      const customer = await Customer.findById(customerId).lean();
+      const customer = await Customer.findOne({ _id: customerId, userId: session.user.id }).lean();
       if (!customer) return NextResponse.json({ error: 'Customer not found' }, { status: 404 });
       return NextResponse.json(rankPropertiesForCustomer(customer as any, properties as any));
     }
@@ -58,14 +58,17 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session) {
+    if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const body = await request.json();
     await connectDB();
 
-    const property = await Property.create(body);
+    const property = await Property.create({
+      ...body,
+      userId: session.user.id
+    });
     return NextResponse.json(property, { status: 201 });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

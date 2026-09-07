@@ -13,7 +13,7 @@ import { formatINR } from '@/lib/crmOptions';
 export async function GET(request: Request) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session) {
+    if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -26,7 +26,7 @@ export async function GET(request: Request) {
       return NextResponse.json([], { status: 200 });
     }
 
-    const query: any = {};
+    const query: any = { userId: session.user.id };
     if (search) {
       query.$or = [
         { customerName: { $regex: search, $options: 'i' } },
@@ -46,7 +46,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session) {
+    if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -101,8 +101,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Database unavailable' }, { status: 503 });
     }
 
-    // 1. Fetch Customer
-    const customer = await Customer.findById(customerId);
+    // Fetch Customer for current user
+    const customer = await Customer.findOne({ _id: customerId, userId: session.user.id });
     if (!customer) {
       return NextResponse.json({ error: 'Customer not found' }, { status: 404 });
     }
@@ -121,8 +121,9 @@ export async function POST(request: Request) {
     const calculatedRemaining = Math.max(0, demandAmount - totalReceived);
     const initialPayments = Array.isArray(paymentHistory) ? paymentHistory : [];
 
-    // 2. Create Sold Customer Record
+    // Create Sold Customer Record with userId
     const soldCustomer = await SoldCustomer.create({
+      userId: session.user.id,
       customerId,
       customerName: customer.fullName,
       mobile: customer.mobileNumber,
@@ -171,32 +172,34 @@ export async function POST(request: Request) {
       paymentHistory: initialPayments
     });
 
-    // 3. Update Customer Status to "Sold"
+    // Update Customer Status to "Sold"
     customer.leadStatus = 'Sold';
-    await customer.save(); // pre-save calculates new lead score!
+    await customer.save();
 
-    // 4. Try updating matching Property status to "Sold" in Inventory
-    // Match by name if exact or location
+    // Update matching Property status to "Sold" for current user
     await Property.updateOne(
-      { propertyName: { $regex: new RegExp(`^${projectName.trim()}$`, 'i') } },
+      { userId: session.user.id, propertyName: { $regex: new RegExp(`^${projectName.trim()}$`, 'i') } },
       { $set: { status: 'Sold' } }
     );
 
-    // 5. Log Activities
+    // Log Activities
     await Activity.create({
+      userId: session.user.id,
       customerId,
       type: 'Booked',
       description: `Property booked: ${projectName} at ${location}. Amount: ${formatINR(demandAmount)}.`
     });
 
     await Activity.create({
+      userId: session.user.id,
       customerId,
       type: 'Sold',
       description: `Sale closed! Processed agreement status: ${agreementStatus || 'Pending'}.`
     });
 
-    // 6. Create Notification
+    // Create Notification
     await Notification.create({
+      userId: session.user.id,
       title: 'Deal Closed successfully',
       message: `Property sold to ${customer.fullName} - ${projectName} (${location}) for ${formatINR(demandAmount)}.`,
       type: 'Booking',
@@ -206,6 +209,7 @@ export async function POST(request: Request) {
 
     if (registryDate) {
       await Notification.create({
+        userId: session.user.id,
         title: 'Registry Milestone Scheduled',
         message: `Registry file processing for ${customer.fullName} is due on ${new Date(registryDate).toLocaleDateString()}.`,
         type: 'Registry',
